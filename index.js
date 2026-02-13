@@ -1,47 +1,34 @@
 export default {
   async fetch(request, env) {
-    // 1. The Real Data Source
     const target = "https://www.texas-pollen.com/current-levels"; 
     
-    // 2. Your Proxy URL - Ensure this exactly matches your proxy worker's custom domain
-    const proxyUrl = `https://pollen-api.acekallas.com/?url=${encodeURIComponent(target)}`;
+    // BYPASS THE 530: Use the direct .workers.dev link here.
+    // This is much more stable for internal communication.
+    const proxyUrl = `https://pollen-proxy.acekallas.workers.dev/?url=${encodeURIComponent(target)}`;
 
     try {
-      const response = await fetch(proxyUrl, {
-        method: "GET",
-        headers: { "Accept": "application/json" }
-      });
-
+      const response = await fetch(proxyUrl);
+      
       if (!response.ok) {
-        // This will show us if the proxy is the one failing
-        return new Response(JSON.stringify({ 
-          error: `Proxy Error: ${response.status}`,
-          debug: `Attempted to fetch: ${proxyUrl}`
-        }), { status: response.status, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
+        return new Response(JSON.stringify({ error: `Proxy Status: ${response.status}` }), { 
+          status: 500, 
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } 
+        });
       }
 
       const text = await response.text();
-
-      // 3. Clean and return
-      return new Response(JSON.stringify({
+      const result = {
         cedar: extractValue(text, "Cedar"),
         oak: extractValue(text, "Oak"),
         ragweed: extractValue(text, "Ragweed"),
-        updated: new Date().toLocaleTimeString(),
-        status: "Healthy"
-      }), {
-        headers: { 
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*" // Allows acekallas.com to read this
-        }
-      });
+        updated: new Date().toLocaleTimeString("en-US", { timeZone: "America/Chicago" }),
+      };
 
-    } catch (err) {
-      // This catches DNS or SSL failures
-      return new Response(JSON.stringify({ error: "Network/SSL Failure", details: err.message }), { 
-        status: 500, 
-        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } 
+      return new Response(JSON.stringify(result), {
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
       });
+    } catch (err) {
+      return new Response(JSON.stringify({ error: "Fetch Error", details: err.message }), { status: 500 });
     }
   }
 };
