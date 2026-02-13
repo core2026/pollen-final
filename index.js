@@ -1,9 +1,22 @@
 export default {
   async fetch(request, env) {
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    };
+
+    // Handle browser pre-flight check (Fixes the CORS block)
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders });
+    }
+
     const lat = "29.74"; 
     const lon = "-98.64";
     const apiKey = env.TOMORROW_API_KEY; 
-    const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&apikey=${apiKey}`;
+    
+    // The "One Liner" fix for Fahrenheit
+    const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`;
 
     try {
       const response = await fetch(url);
@@ -30,12 +43,15 @@ export default {
 
       return new Response(JSON.stringify(result), {
         headers: { 
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*" 
+          ...corsHeaders,
+          "Content-Type": "application/json"
         }
       });
     } catch (err) {
-      return new Response(JSON.stringify({ error: "API Error" }), { status: 500 });
+      return new Response(JSON.stringify({ error: "API Error" }), { 
+        status: 500,
+        headers: corsHeaders
+      });
     }
   }
 };
