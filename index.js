@@ -1,44 +1,59 @@
 export default {
   async fetch(request, env) {
-    const userCity = request.cf.city || "Local Area";
-    const userState = request.cf.regionCode || "USA";
-    const lat = request.cf.latitude || "29.74";
-    const lon = request.cf.longitude || "-98.64";
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    };
 
-    const apiKey = env.TOMORROW_API_KEY; 
-    const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&apikey=${apiKey}`;
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+    const lat = "29.74"; 
+    const lon = "-98.64";
+    
+    // Safety check: Is the key actually there?
+    if (!env.TOMORROW_API_KEY) {
+      return new Response(JSON.stringify({ error: "Worker cannot see TOMORROW_API_KEY. Check your Cloudflare Variables." }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}`;
 
     try {
       const response = await fetch(url);
       const data = await response.json();
+
+      // If Tomorrow.io returns an error (like 429 or 403), show us why
+      if (!response.ok) {
+        return new Response(JSON.stringify({ 
+          error: "Tomorrow.io Rejected Request", 
+          status: response.status,
+          message: data.message || "Check API Key/Rate Limits"
+        }), { 
+          status: response.status, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        });
+      }
+
       const v = data.data.values;
-
-      // Cedar Risk Surrogate Logic
-      let cedarRisk = "Low";
-      if (v.humidity < 40 && v.windGust > 15) cedarRisk = "High";
-      else if (v.humidity < 50 || v.windGust > 10) cedarRisk = "Moderate";
-
-      // Car Wash Logic
-      let carWash = "🧼 Great Day to Wash!";
-      if (v.precipitationProbability > 20) carWash = "❌ Wait (Rain Chance)";
-      else if (v.windGust > 20) carWash = "💨 Wait (High Dust)";
-
       const result = {
-        location: `${userCity}, ${userState}`,
-        actualTemp: Math.round(v.temperature),       // Raw Air Temp
-        feelsLike: Math.round(v.temperatureApparent), // Apparent Temp
+        location: "Fair Oaks Ranch",
+        temp: Math.round(v.temperatureApparent),
         uvIndex: v.uvIndex,
-        cedar: cedarRisk,
-        carWash: carWash,
-        clearsUp: v.uvIndex > 6 ? "UV Peaks soon. Seek shade." : "Conditions are stable for now.",
+        cedar: (v.humidity < 45 && v.windGust > 12) ? "Moderate" : "Low",
+        carWash: v.precipitationProbability > 20 ? "❌ Wait" : "🧼 Good",
+        clearsUp: "Stable conditions.",
         updated: new Date().toLocaleTimeString("en-US", { timeZone: "America/Chicago" })
       };
 
       return new Response(JSON.stringify(result), {
-        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
+
     } catch (err) {
-      return new Response(JSON.stringify({ error: "API Error" }), { status: 500 });
+      return new Response(JSON.stringify({ error: "Worker Crash", message: err.message }), { 
+        status: 500, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
     }
   }
 };
