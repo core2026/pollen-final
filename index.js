@@ -7,30 +7,39 @@ export default {
       const response = await fetch(proxyUrl);
       const html = await response.text();
 
-      // NEW LOGIC: Target the Google Charts data format you found
+      // We are looking for: ['Cedar', 602,
+      // The Regex below handles both single and double quotes just in case
       const data = {
-        cedar: extractChartValue(html, "Cedar"),
-        oak: extractChartValue(html, "Trees"), // Using "Trees" since Oak is usually bundled there on this chart
-        ragweed: extractChartValue(html, "Molds"), // Austin currently showing Molds/PM2.5
-        updated: new Date().toLocaleTimeString("en-US", { timeZone: "America/Chicago" })
+        cedar: scrapeChart(html, "Cedar"),
+        oak: scrapeChart(html, "Trees"),    // Mapping "Trees" to Oak for now
+        ragweed: scrapeChart(html, "Molds"), // Mapping "Molds" to Ragweed for now
+        updated: new Date().toLocaleTimeString("en-US", { 
+          timeZone: "America/Chicago",
+          hour: '2-digit', 
+          minute: '2-digit' 
+        })
       };
 
       return new Response(JSON.stringify(data), {
-        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+        headers: { 
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*" 
+        }
       });
     } catch (err) {
-      return new Response(JSON.stringify({ error: "Chart data error" }), { status: 500 });
+      return new Response(JSON.stringify({ error: "Data Sync Error" }), { status: 500 });
     }
   }
 };
 
-function extractChartValue(html, label) {
-    // This looks for: ['Label', Number,
-    const regex = new RegExp(`'${label}',\\s*(\\d+)`, "i");
+function scrapeChart(html, label) {
+    // This regex looks for: ['Label', 123
+    // It is very specific to the Google Chart code you pasted.
+    const regex = new RegExp(`['"]${label}['"],\\s*(\\d+)`, "i");
     const match = html.match(regex);
     
     if (match && match[1]) {
-        return match[1]; // Returns the raw number (e.g., 602 for Cedar)
+        return match[1]; 
     }
-    return "0";
+    return "0"; // Default to 0 if not found
 }
