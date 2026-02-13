@@ -6,27 +6,26 @@ export default {
     const lon = request.cf.longitude || "-98.64";
 
     const apiKey = env.TOMORROW_API_KEY; 
-    const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&apikey=${apiKey}`;
+    // ADDED &units=imperial to the URL below
+    const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`;
 
     try {
       const response = await fetch(url);
       const data = await response.json();
       const v = data.data.values;
 
-      // Cedar Risk Surrogate Logic
       let cedarRisk = "Low";
       if (v.humidity < 40 && v.windGust > 15) cedarRisk = "High";
       else if (v.humidity < 50 || v.windGust > 10) cedarRisk = "Moderate";
 
-      // Car Wash Logic
       let carWash = "🧼 Great Day to Wash!";
       if (v.precipitationProbability > 20) carWash = "❌ Wait (Rain Chance)";
       else if (v.windGust > 20) carWash = "💨 Wait (High Dust)";
 
       const result = {
         location: `${userCity}, ${userState}`,
-        actualTemp: Math.round(v.temperature),       // Raw Air Temp
-        feelsLike: Math.round(v.temperatureApparent), // Apparent Temp
+        actualTemp: Math.round(v.temperature),       
+        feelsLike: Math.round(v.temperatureApparent), 
         uvIndex: v.uvIndex,
         cedar: cedarRisk,
         carWash: carWash,
