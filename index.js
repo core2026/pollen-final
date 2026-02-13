@@ -1,33 +1,35 @@
 export default {
   async fetch(request, env) {
+    // 1. Define standard headers
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
     };
 
-    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-    const lat = "29.74"; 
-    const lon = "-98.64";
-    
-    // Safety check: Is the key actually there?
-    if (!env.TOMORROW_API_KEY) {
-      return new Response(JSON.stringify({ error: "Worker cannot see TOMORROW_API_KEY. Check your Cloudflare Variables." }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    // 2. Handle browser "permission" check
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders });
     }
 
-    const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}`;
-
     try {
+      // 3. Check for API Key immediately
+      if (!env.TOMORROW_API_KEY) {
+        throw new Error("API Key is missing in Worker Settings");
+      }
+
+      const lat = "29.74"; 
+      const lon = "-98.64";
+      const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}`;
+
       const response = await fetch(url);
       const data = await response.json();
 
-      // If Tomorrow.io returns an error (like 429 or 403), show us why
+      // 4. Handle API-specific errors (Rate limits, etc.)
       if (!response.ok) {
         return new Response(JSON.stringify({ 
-          error: "Tomorrow.io Rejected Request", 
-          status: response.status,
-          message: data.message || "Check API Key/Rate Limits"
+          error: "Tomorrow.io Error", 
+          message: data.message || "Unknown API Issue" 
         }), { 
           status: response.status, 
           headers: { ...corsHeaders, "Content-Type": "application/json" } 
@@ -50,7 +52,11 @@ export default {
       });
 
     } catch (err) {
-      return new Response(JSON.stringify({ error: "Worker Crash", message: err.message }), { 
+      // 5. Catch crashes and send a JSON error instead of a blank 500
+      return new Response(JSON.stringify({ 
+        error: "Worker Crash", 
+        message: err.message 
+      }), { 
         status: 500, 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
       });
