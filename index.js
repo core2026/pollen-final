@@ -1,8 +1,7 @@
 export default {
   async fetch(request, env) {
-    // Cloudflare Edge Geolocation
-    const userCity = request.cf.city || "Fair Oaks Ranch";
-    const userState = request.cf.regionCode || "TX";
+    const userCity = request.cf.city || "Local Area";
+    const userState = request.cf.regionCode || "USA";
     const lat = request.cf.latitude || "29.74";
     const lon = request.cf.longitude || "-98.64";
 
@@ -26,33 +25,20 @@ export default {
 
       const result = {
         location: `${userCity}, ${userState}`,
-        temp: Math.round(v.temperatureApparent), // Changed to match HTML expectations
+        actualTemp: Math.round(v.temperature),       // Raw Air Temp
+        feelsLike: Math.round(v.temperatureApparent), // Apparent Temp
         uvIndex: v.uvIndex,
         cedar: cedarRisk,
         carWash: carWash,
-        clearsUp: v.uvIndex > 6 ? "UV Peaks soon. Seek shade." : "Clear skies for the next few hours.",
-        funFact: getFact(cedarRisk),
+        clearsUp: v.uvIndex > 6 ? "UV Peaks soon. Seek shade." : "Conditions are stable for now.",
         updated: new Date().toLocaleTimeString("en-US", { timeZone: "America/Chicago" })
       };
 
       return new Response(JSON.stringify(result), {
-        headers: { 
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*" 
-        }
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
       });
     } catch (err) {
       return new Response(JSON.stringify({ error: "API Error" }), { status: 500 });
     }
   }
 };
-
-function getFact(risk) {
-  const facts = [
-    "UV rays are strongest between 10 AM and 4 PM.",
-    "Humidity over 50% often keeps pollen closer to the ground.",
-    "The 'Feels Like' temp accounts for wind chill and moisture.",
-    "Dry, windy days are the primary drivers for Cedar dispersal."
-  ];
-  return facts[Math.floor(Math.random() * facts.length)];
-}
