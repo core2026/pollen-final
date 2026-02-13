@@ -1,45 +1,47 @@
 export default {
   async fetch(request, env) {
-    const sourceUrl = "https://www.austinpollen.com/";
-    const proxyUrl = `https://pollen-proxy.acekallas.workers.dev/?url=${encodeURIComponent(sourceUrl)}`;
+    const LAT = "29.74"; // Fair Oaks Ranch area
+    const LON = "-98.64";
+    const API_KEY = env.TOMORROW_API_KEY; 
+    const url = `https://api.tomorrow.io/v4/weather/forecast?location=${LAT},${LON}&apikey=${API_KEY}`;
 
     try {
-      const response = await fetch(proxyUrl);
-      const html = await response.text();
+      const response = await fetch(url);
+      const data = await response.json();
+      const current = data.get.timeline.minutely[0].values; // Simplified for example
 
-      // We are looking for: ['Cedar', 602,
-      // The Regex below handles both single and double quotes just in case
-      const data = {
-        cedar: scrapeChart(html, "Cedar"),
-        oak: scrapeChart(html, "Trees"),    // Mapping "Trees" to Oak for now
-        ragweed: scrapeChart(html, "Molds"), // Mapping "Molds" to Ragweed for now
-        updated: new Date().toLocaleTimeString("en-US", { 
-          timeZone: "America/Chicago",
-          hour: '2-digit', 
-          minute: '2-digit' 
-        })
+      // Logic for Car Wash and Forecast
+      const cedar = current.treeIndex || 0;
+      const rainChance = current.precipitationProbability || 0;
+      
+      let carWash = "Great Day to Wash!";
+      if (cedar > 3) carWash = "Wait - High Pollen";
+      if (rainChance > 40) carWash = "Wait - Rain Expected";
+
+      const result = {
+        cedar: cedar,
+        oak: current.grassIndex || 0, // Tomorrow.io uses indices 0-5
+        carWash: carWash,
+        funFact: getFunFact(cedar),
+        clearsUp: "Looking better by Tuesday", // You can calculate this from daily data
+        updated: new Date().toLocaleTimeString()
       };
 
-      return new Response(JSON.stringify(data), {
-        headers: { 
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*" 
-        }
+      return new Response(JSON.stringify(result), {
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
       });
     } catch (err) {
-      return new Response(JSON.stringify({ error: "Data Sync Error" }), { status: 500 });
+      return new Response(JSON.stringify({ error: "API Failure" }), { status: 500 });
     }
   }
 };
 
-function scrapeChart(html, label) {
-    // This regex looks for: ['Label', 123
-    // It is very specific to the Google Chart code you pasted.
-    const regex = new RegExp(`['"]${label}['"],\\s*(\\d+)`, "i");
-    const match = html.match(regex);
-    
-    if (match && match[1]) {
-        return match[1]; 
-    }
-    return "0"; // Default to 0 if not found
+function getFunFact(level) {
+  const facts = [
+    "Cedar trees are actually Junipers!",
+    "Pollen can travel up to 400 miles over the Gulf.",
+    "A single Cedar tree can produce a billion pollen grains.",
+    "Bees use static electricity to attract pollen to their bodies."
+  ];
+  return facts[Math.floor(Math.random() * facts.length)];
 }
