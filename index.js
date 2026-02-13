@@ -1,22 +1,21 @@
 export default {
   async fetch(request, env) {
-    // These are the sources we know work for your area
-    const sources = {
-        austin: "https://austinpollen.com/",
-        texas: "https://www.texas-pollen.com/"
-    };
+    const sources = [
+      "https://austinpollen.com/",
+      "https://www.texas-pollen.com/"
+    ];
 
     try {
-      // We'll fetch Austin Pollen as the primary source via your proxy
-      const proxyUrl = `https://pollen-proxy.acekallas.workers.dev/?url=${encodeURIComponent(sources.austin)}`;
+      // We fetch the main Austin site through your stable proxy
+      const proxyUrl = `https://pollen-proxy.acekallas.workers.dev/?url=${encodeURIComponent(sources[0])}`;
       const response = await fetch(proxyUrl);
       const html = await response.text();
 
-      // Updated Extraction Logic: Looking for the specific way Austin Pollen displays data
+      // NEW LOGIC: This captures both numbers and words (like "High" or "Moderate")
       const data = {
-        cedar: parseLevel(html, "Cedar"),
-        oak: parseLevel(html, "Oak"),
-        ragweed: parseLevel(html, "Ragweed"),
+        cedar: extractPollen(html, "Cedar"),
+        oak: extractPollen(html, "Oak"),
+        ragweed: extractPollen(html, "Ragweed") || extractPollen(html, "Weeds"),
         updated: new Date().toLocaleTimeString("en-US", { timeZone: "America/Chicago" })
       };
 
@@ -25,17 +24,19 @@ export default {
       });
 
     } catch (err) {
-      return new Response(JSON.stringify({ error: "Data sync failed" }), { status: 500 });
+      return new Response(JSON.stringify({ error: "Sync failed" }), { status: 500 });
     }
   }
 };
 
-function parseLevel(text, type) {
-  // This regex is specifically tuned for the Central Texas data formats
-  // It looks for the word (Cedar) followed by some HTML tags and a number
-  const regex = new RegExp(`${type}.*?>(\\d+)<`, "i");
-  const match = text.match(regex);
-  
-  // If no number found, we return "Low" or "0"
-  return match ? match[1] : "0";
+function extractPollen(html, type) {
+  // 1. Try to find a specific number first (e.g., "Cedar: 150")
+  const numRegex = new RegExp(`${type}.*?>(\\d+)<`, "i");
+  const numMatch = html.match(numRegex);
+  if (numMatch) return numMatch[1];
+
+  // 2. If no number, look for status words (e.g., "High", "Moderate", "Low")
+  const statusRegex = new RegExp(`${type}.*?>(High|Moderate|Low|Very High)<`, "i");
+  const statusMatch = html.match(statusRegex);
+  return statusMatch ? statusMatch[1] : "N/A";
 }
