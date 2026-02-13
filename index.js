@@ -1,34 +1,49 @@
 export default {
   async fetch(request, env) {
-    // 1. Define the actual source of the pollen data
-    const rawDataSource = "https://example-pollen-provider.com/data.txt";
+    // 1. The Real Data Source
+    const target = "https://www.texas-pollen.com/current-levels"; 
     
-    // 2. Call your proxy using your NEW custom subdomain
-    const proxyUrl = `https://pollen-api.acekallas.com/?url=${encodeURIComponent(rawDataSource)}`;
+    // 2. Your Proxy URL - Ensure this exactly matches your proxy worker's custom domain
+    const proxyUrl = `https://pollen-api.acekallas.com/?url=${encodeURIComponent(target)}`;
 
     try {
-      const response = await fetch(proxyUrl);
+      const response = await fetch(proxyUrl, {
+        method: "GET",
+        headers: { "Accept": "application/json" }
+      });
+
+      if (!response.ok) {
+        // This will show us if the proxy is the one failing
+        return new Response(JSON.stringify({ 
+          error: `Proxy Error: ${response.status}`,
+          debug: `Attempted to fetch: ${proxyUrl}`
+        }), { status: response.status, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } });
+      }
+
       const text = await response.text();
 
-      // 3. Clean the data (Logic depends on your source's text format)
-      const result = {
+      // 3. Clean and return
+      return new Response(JSON.stringify({
         cedar: extractValue(text, "Cedar"),
         oak: extractValue(text, "Oak"),
         ragweed: extractValue(text, "Ragweed"),
-        updated: new Date().toLocaleString("en-US", { timeZone: "America/Chicago" }),
-        source: "acekallas.com Data Engine"
-      };
-
-      return new Response(JSON.stringify(result), {
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "https://acekallas.com", // Security: only allow your main site
-        },
+        updated: new Date().toLocaleTimeString(),
+        status: "Healthy"
+      }), {
+        headers: { 
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*" // Allows acekallas.com to read this
+        }
       });
+
     } catch (err) {
-      return new Response(JSON.stringify({ error: "Data fetch failed" }), { status: 500 });
+      // This catches DNS or SSL failures
+      return new Response(JSON.stringify({ error: "Network/SSL Failure", details: err.message }), { 
+        status: 500, 
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } 
+      });
     }
-  },
+  }
 };
 
 function extractValue(text, type) {
