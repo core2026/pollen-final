@@ -1,8 +1,8 @@
 export default {
   async fetch(request, env) {
-    // Get location data directly from Cloudflare's Edge
-    const userCity = request.cf.city || "Your City";
-    const userState = request.cf.region || "USA";
+    // Cloudflare Edge Geolocation
+    const userCity = request.cf.city || "Fair Oaks Ranch";
+    const userState = request.cf.regionCode || "TX";
     const lat = request.cf.latitude || "29.74";
     const lon = request.cf.longitude || "-98.64";
 
@@ -14,21 +14,21 @@ export default {
       const data = await response.json();
       const v = data.data.values;
 
-      // --- CEDAR SURROGATE LOGIC ---
+      // Cedar Risk Surrogate Logic
       let cedarRisk = "Low";
       if (v.humidity < 40 && v.windGust > 15) cedarRisk = "High";
       else if (v.humidity < 50 || v.windGust > 10) cedarRisk = "Moderate";
 
-      // --- CAR WASH LOGIC ---
+      // Car Wash Logic
       let carWash = "🧼 Great Day to Wash!";
       if (v.precipitationProbability > 20) carWash = "❌ Wait (Rain Chance)";
       else if (v.windGust > 20) carWash = "💨 Wait (High Dust)";
 
       const result = {
-        location: `${userCity}, ${userState}`, // This sends the dynamic city name
-        temp: Math.round(v.temperatureApparent),
-        cedar: cedarRisk,
+        location: `${userCity}, ${userState}`,
+        temp: Math.round(v.temperatureApparent), // Changed to match HTML expectations
         uvIndex: v.uvIndex,
+        cedar: cedarRisk,
         carWash: carWash,
         clearsUp: v.uvIndex > 6 ? "UV Peaks soon. Seek shade." : "Clear skies for the next few hours.",
         funFact: getFact(cedarRisk),
@@ -36,10 +36,13 @@ export default {
       };
 
       return new Response(JSON.stringify(result), {
-        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+        headers: { 
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*" 
+        }
       });
     } catch (err) {
-      return new Response(JSON.stringify({ error: "API Sync Failed" }), { status: 500 });
+      return new Response(JSON.stringify({ error: "API Error" }), { status: 500 });
     }
   }
 };
@@ -48,7 +51,7 @@ function getFact(risk) {
   const facts = [
     "UV rays are strongest between 10 AM and 4 PM.",
     "Humidity over 50% often keeps pollen closer to the ground.",
-    "A 'Feels Like' temp accounts for wind chill and moisture.",
+    "The 'Feels Like' temp accounts for wind chill and moisture.",
     "Dry, windy days are the primary drivers for Cedar dispersal."
   ];
   return facts[Math.floor(Math.random() * facts.length)];
