@@ -1,29 +1,40 @@
 export default {
   async fetch(request, env) {
-    // 1. Get dynamic location from the user's IP address
-    // Cloudflare provides these fields automatically in the request.cf object
-    const userCity = request.cf.city || "San Antonio";
-    const userState = request.cf.regionCode || "TX";
-    const lat = request.cf.latitude || "29.74";
-    const lon = request.cf.longitude || "-98.64";
+    // 1. Safe Geolocation (Adding fallbacks to prevent 500 errors)
+    const cf = request.cf || {};
+    const userCity = cf.city || "San Antonio";
+    const userState = cf.regionCode || "TX";
+    const lat = cf.latitude || "29.74";
+    const lon = cf.longitude || "-98.64";
 
     const apiKey = env.TOMORROW_API_KEY; 
     
-    // 2. The URL now explicitly includes &units=imperial for Fahrenheit
+    // 2. Imperial Units for Fahrenheit
     const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`;
+
+    // Standard CORS headers to keep the browser happy
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, HEAD, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    };
+
+    // Handle "Options" pre-flight request from browser
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders });
+    }
 
     try {
       const response = await fetch(url);
       
       if (!response.ok) {
-        throw new Error(`API returned ${response.status}`);
+        throw new Error(`Tomorrow.io API failed with status ${response.status}`);
       }
 
       const data = await response.json();
       const v = data.data.values;
 
-      // 3. Cedar Risk Logic (Estimating based on weather triggers)
-      // High risk = Low humidity (<40%) and significant wind (>15 mph)
+      // 3. Cedar Risk Logic
       let cedarRisk = "Low";
       if (v.humidity < 40 && v.windGust > 15) {
         cedarRisk = "High";
@@ -39,7 +50,6 @@ export default {
         carWash = "💨 Wait (High Dust/Wind)";
       }
 
-      // 5. Construct the response object
       const result = {
         location: `${userCity}, ${userState}`,
         actualTemp: Math.round(v.temperature),
@@ -57,18 +67,19 @@ export default {
 
       return new Response(JSON.stringify(result), {
         headers: { 
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*" 
+          ...corsHeaders,
+          "Content-Type": "application/json"
         }
       });
 
     } catch (err) {
-      return new Response(JSON.stringify({ 
-        error: "API Sync Failed", 
-        details: err.message 
-      }), { 
+      // If it fails, we STILL send the CORS headers so you can see the real error message
+      return new Response(JSON.stringify({ error: err.message }), { 
         status: 500,
-        headers: { "Access-Control-Allow-Origin": "*" }
+        headers: { 
+          ...corsHeaders,
+          "Content-Type": "application/json"
+        }
       });
     }
   }
