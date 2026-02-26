@@ -9,8 +9,6 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
     const urlParams = new URL(request.url).searchParams;
-    
-    // 1. Prioritize GPS coordinates from the website, fallback to Cloudflare IP
     const lat = urlParams.get("lat") || request.cf.latitude || "29.74"; 
     const lon = urlParams.get("lon") || request.cf.longitude || "-98.64";
     const city = urlParams.get("city") || request.cf.city || "Local Area";
@@ -44,15 +42,15 @@ export default {
           grass: getLevel(v.grassIndex) || "Low",
           weed: getLevel(v.weedIndex) || "Low",
           wind: Math.round(v.windSpeed || 0),
-          windDir: v.windDirection || 0,
           rainProb: v.precipitationProbability || 0,
+          humidity: v.humidity || 0,
+          isPrecise: !!urlParams.get("lat"),
           updated: new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })
         };
 
         response = new Response(JSON.stringify(result), {
           headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "public, max-age=600" }
         });
-
         ctx.waitUntil(cache.put(cacheKey, response.clone()));
       } catch (err) {
         return new Response(JSON.stringify({ error: "Offline" }), { status: 500, headers: corsHeaders });
