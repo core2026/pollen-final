@@ -8,10 +8,12 @@ export default {
 
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-    // 1. Detect Location (Agnostic)
-    const lat = request.cf.latitude || "30.26"; 
-    const lon = request.cf.longitude || "-97.74";
-    const city = request.cf.city || "Local Area";
+    const urlParams = new URL(request.url).searchParams;
+    
+    // 1. Prioritize GPS coordinates from the website, fallback to Cloudflare IP
+    const lat = urlParams.get("lat") || request.cf.latitude || "29.74"; 
+    const lon = urlParams.get("lon") || request.cf.longitude || "-98.64";
+    const city = urlParams.get("city") || request.cf.city || "Local Area";
 
     const cacheUrl = new URL(request.url);
     const cacheKey = new Request(cacheUrl.toString(), request);
@@ -20,10 +22,10 @@ export default {
 
     if (!response) {
       const apiKey = env.TOMORROW_API_KEY; 
-      const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`;
+      const apiUrl = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`;
 
       try {
-        const apiResponse = await fetch(url);
+        const apiResponse = await fetch(apiUrl);
         const data = await apiResponse.json();
         const v = data.data.values;
 
@@ -33,26 +35,22 @@ export default {
           return levels[Math.round(val)];
         };
 
-        // Pollen risk calculation for areas without API pollen data
-        const calculatedRisk = (v.humidity < 45 && v.windGust > 12) ? "Moderate" : "Low";
-
         const result = {
           city: city,
           temp: Math.round(v.temperature),
           feelsLike: Math.round(v.temperatureApparent),
           uv: v.uvIndex || 0,
-          tree: getLevel(v.treeIndex) || calculatedRisk, 
+          tree: getLevel(v.treeIndex) || "Low", 
           grass: getLevel(v.grassIndex) || "Low",
           weed: getLevel(v.weedIndex) || "Low",
           wind: Math.round(v.windSpeed || 0),
           windDir: v.windDirection || 0,
           rainProb: v.precipitationProbability || 0,
-          humidity: v.humidity || 0,
           updated: new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })
         };
 
         response = new Response(JSON.stringify(result), {
-          headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "public, max-age=900" }
+          headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "public, max-age=600" }
         });
 
         ctx.waitUntil(cache.put(cacheKey, response.clone()));
