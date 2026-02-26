@@ -16,32 +16,33 @@ export default {
     if (!response) {
       const lat = "29.74"; 
       const lon = "-98.64";
-      const apiKey = env.TOMORROW_API_KEY; 
-      // We are explicitly asking for the pollen fields here
-      const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`;
+      // Explicitly requesting pollen and weather fields
+      const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}`;
 
       try {
         const apiResponse = await fetch(url);
         const data = await apiResponse.json();
         const v = data.data.values;
 
-        // Helper: Converts 0-5 index to text, defaults to "None" if data is missing
         const getLevel = (val) => {
-          if (val === undefined || val === null) return "None";
+          if (val === undefined || val === null || val === 0) return null; // Return null so we can fallback
           const levels = ["None", "Very Low", "Low", "Medium", "High", "Very High"];
-          return levels[Math.round(val)] || "None";
+          return levels[Math.round(val)];
         };
 
+        // FALLBACK LOGIC: If API pollen is missing, calculate risk based on humidity/wind
+        const calculatedCedar = (v.humidity < 45 && v.windGust > 12) ? "Moderate" : "Low";
+
         const result = {
-          actualTemp: Math.round(v.temperature || 0),
-          feelsLike: Math.round(v.temperatureApparent || 0),
+          actualTemp: Math.round(v.temperature),
+          feelsLike: Math.round(v.temperatureApparent),
           uvIndex: v.uvIndex || 0,
-          // We use fallback to "0" so getLevel returns "None" instead of "undefined"
-          treePollen: getLevel(v.treeIndex || 0),
-          grassPollen: getLevel(v.grassIndex || 0),
-          weedPollen: getLevel(v.weedIndex || 0),
+          // Try API first, then fallback to Calculation, then "Low"
+          treePollen: getLevel(v.treeIndex) || calculatedCedar, 
+          grassPollen: getLevel(v.grassIndex) || "Low",
+          weedPollen: getLevel(v.weedIndex) || "Low",
           carWash: v.precipitationProbability > 20 ? "❌ Wait" : "🧼 Good",
-          updated: new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })
+          updated: new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit', timeZone: "America/Chicago" })
         };
 
         response = new Response(JSON.stringify(result), {
@@ -50,7 +51,7 @@ export default {
 
         ctx.waitUntil(cache.put(cacheKey, response.clone()));
       } catch (err) {
-        return new Response(JSON.stringify({ error: "Offline" }), { status: 500, headers: corsHeaders });
+        return new Response(JSON.stringify({ error: "API Offline" }), { status: 500, headers: corsHeaders });
       }
     }
     return response;
