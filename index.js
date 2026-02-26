@@ -21,22 +21,23 @@ export default {
       const data = await apiResponse.json();
       const v = data.data.values;
 
-      // 1. Calculate Comfort Level (Dew Point approximation)
-      const dewPoint = v.temperature - ((100 - v.humidity) / 5);
-      let comfort = "Pleasant";
-      if (dewPoint > 65) comfort = "Sticky";
-      if (dewPoint > 72) comfort = "Miserable";
+      const getLevel = (val) => {
+        const levels = ["None", "Very Low", "Low", "Medium", "High", "Very High"];
+        return levels[Math.round(val)] || "None";
+      };
 
       const result = {
         city: city,
         temp: Math.round(v.temperature),
         feelsLike: Math.round(v.temperatureApparent),
         uv: v.uvIndex || 0,
-        tree: v.treeIndex || 0,
+        tree: getLevel(v.treeIndex),
+        grass: getLevel(v.grassIndex),
+        weed: getLevel(v.weedIndex),
         wind: Math.round(v.windSpeed || 0),
-        humidity: v.humidity || 0,
-        comfort: comfort,
         rainProb: v.precipitationProbability || 0,
+        humidity: v.humidity || 0,
+        isPrecise: !!urlParams.get("lat"),
         updated: new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })
       };
 
