@@ -40,7 +40,7 @@ export default {
           cedar: (v.humidity < 45 && v.windGust > 12) ? "Moderate" : "Low",
           carWash: v.precipitationProbability > 20 ? "❌ Wait" : "🧼 Good",
           clearsUp: "Stable conditions.",
-          timestamp: Date.now() // Used for the countdown timer
+          timestamp: Date.now() 
         };
 
         response = new Response(JSON.stringify(result), {
