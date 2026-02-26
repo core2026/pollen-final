@@ -17,7 +17,8 @@ export default {
 
       const lat = "29.74"; 
       const lon = "-98.64";
-      const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}`;
+      const apiKey = env.TOMORROW_API_KEY; 
+      const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`;
 
       try {
         const apiResponse = await fetch(url);
@@ -33,13 +34,13 @@ export default {
         const v = data.data.values;
         const result = {
           location: "Fair Oaks Ranch",
-          actualTemp: Math.round(v.temperature),       // Added this back
-          feelsLike: Math.round(v.temperatureApparent), // Added this back
+          actualTemp: Math.round(v.temperature),
+          feelsLike: Math.round(v.temperatureApparent),
           uvIndex: v.uvIndex,
           cedar: (v.humidity < 45 && v.windGust > 12) ? "Moderate" : "Low",
           carWash: v.precipitationProbability > 20 ? "❌ Wait" : "🧼 Good",
           clearsUp: "Stable conditions.",
-          updated: new Date().toLocaleTimeString("en-US", { timeZone: "America/Chicago", hour: '2-digit', minute: '2-digit' })
+          timestamp: Date.now() // Used for the countdown timer
         };
 
         response = new Response(JSON.stringify(result), {
