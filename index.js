@@ -17,12 +17,19 @@ export default {
     const region = cf.regionCode || "";
 
     const apiKey = env.TOMORROW_API_KEY; 
-    const apiUrl = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`;
+    const weatherUrl = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`;
+    const sunUrl = `https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0`;
 
     try {
-      const apiResponse = await fetch(apiUrl);
-      const data = await apiResponse.json();
-      const v = data.data.values;
+      // Fetch both Weather and Sun data simultaneously
+      const [weatherRes, sunRes] = await Promise.all([
+        fetch(weatherUrl),
+        fetch(sunUrl)
+      ]);
+
+      const wData = await weatherRes.json();
+      const sData = await sunRes.json();
+      const v = wData.data.values;
 
       const month = new Date().getMonth();
       const isTexas = region === "TX" || city.includes("Fair Oaks") || city.includes("San Antonio");
@@ -31,7 +38,6 @@ export default {
       const getLevel = (val, type) => {
         const levels = ["None", "Very Low", "Low", "Medium", "High", "Very High"];
         let label = levels[Math.round(val)] || "None";
-        // Only show "High" if the API actually sees it OR we are in peak season
         if (type === 'tree' && isOakSeason && val < 2) label = "Elevated (Oak)";
         return label;
       };
@@ -47,8 +53,10 @@ export default {
         uv: v.uvIndex || 0,
         tree: treeLevel,
         humidity: v.humidity,
+        wind: Math.round(v.windSpeed),
         humDesc: v.humidity < 30 ? "🌵 Dry Air" : v.humidity > 65 ? "💧 Muggy" : "Comfortable",
         pollenAlert,
+        sunset: sData.results.sunset, // ISO Format from API
         washAdvice: (rainChance >= 25 || pollenAlert) ? "⚠️ Skip Wash" : "✨ Wash OK",
         washColor: (rainChance >= 25 || pollenAlert) ? "#fbbf24" : "#22c55e",
         isPrecise: !!urlParams.get("lat"),
