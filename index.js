@@ -42,7 +42,7 @@ export default {
       };
 
       return new Response(JSON.stringify(result), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "public, max-age=600" }
       });
     } catch (err) {
       return new Response(JSON.stringify({ error: "Offline" }), { status: 500, headers: corsHeaders });
