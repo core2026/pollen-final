@@ -17,15 +17,14 @@ export default {
 
       const lat = "29.74"; 
       const lon = "-98.64";
-      const apiKey = env.TOMORROW_API_KEY; 
-      const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`;
+      const url = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}`;
 
       try {
         const apiResponse = await fetch(url);
         const data = await apiResponse.json();
 
         if (!apiResponse.ok) {
-          return new Response(JSON.stringify({ error: "API Limit", message: data.message }), { 
+          return new Response(JSON.stringify({ error: "API Limit" }), { 
             status: apiResponse.status, 
             headers: { ...corsHeaders, "Content-Type": "application/json" } 
           });
@@ -39,8 +38,8 @@ export default {
           uvIndex: v.uvIndex,
           cedar: (v.humidity < 45 && v.windGust > 12) ? "Moderate" : "Low",
           carWash: v.precipitationProbability > 20 ? "❌ Wait" : "🧼 Good",
-          clearsUp: "Stable conditions.",
-          timestamp: Date.now() 
+          clearsUp: "Conditions are stable.",
+          updated: new Date().toLocaleTimeString("en-US", { timeZone: "America/Chicago", hour: '2-digit', minute: '2-digit' })
         };
 
         response = new Response(JSON.stringify(result), {
@@ -54,7 +53,7 @@ export default {
         ctx.waitUntil(cache.put(cacheKey, response.clone()));
 
       } catch (err) {
-        return new Response(JSON.stringify({ error: "Worker Crash", message: err.message }), { 
+        return new Response(JSON.stringify({ error: "Worker Crash" }), { 
           status: 500, 
           headers: { ...corsHeaders, "Content-Type": "application/json" } 
         });
