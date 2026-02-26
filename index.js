@@ -9,13 +9,13 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
     const urlParams = new URL(request.url).searchParams;
-    
-    // Cloudflare Geo-data detection
     const cf = request.cf || {};
+    
+    // Logic: Use GPS if provided, otherwise fallback to Cloudflare Edge location
     const lat = urlParams.get("lat") || cf.latitude || "29.74"; 
     const lon = urlParams.get("lon") || cf.longitude || "-98.64";
     const city = urlParams.get("city") || cf.city || "Local Area";
-    const zip = urlParams.get("zip") || cf.postalCode || "78015"; // Default to Fair Oaks
+    const zip = urlParams.get("zip") || cf.postalCode || "78015";
 
     const apiKey = env.TOMORROW_API_KEY; 
     const apiUrl = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`;
@@ -30,19 +30,21 @@ export default {
         return levels[Math.round(val)] || "None";
       };
 
+      // NEW FEATURE: Humidity Logic
+      let humDesc = "Comfortable";
+      if (v.humidity < 30) humDesc = "🌵 Dry Air";
+      else if (v.humidity > 65) humDesc = "💧 Muggy";
+
       const result = {
-        city,
-        zip,
-        lat,
-        lon,
+        city, zip, lat, lon,
         temp: Math.round(v.temperature),
         feelsLike: Math.round(v.temperatureApparent),
         uv: v.uvIndex || 0,
         tree: getLevel(v.treeIndex),
         grass: getLevel(v.grassIndex),
         weed: getLevel(v.weedIndex),
-        wind: Math.round(v.windSpeed || 0),
-        humidity: v.humidity || 0,
+        humidity: v.humidity,
+        humDesc: humDesc,
         isPrecise: !!urlParams.get("lat"),
         updated: new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })
       };
