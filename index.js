@@ -14,19 +14,21 @@ export default {
     const lat = urlParams.get("lat") || cf.latitude || "29.7408";
     const lon = urlParams.get("lon") || cf.longitude || "-98.6444";
     const cityName = urlParams.get("name") || cf.city || "San Antonio";
+    
+    // Create a URL-friendly slug for the widget (e.g., "San Antonio" -> "san-antonio")
+    const citySlug = cityName.toLowerCase().replace(/\s+/g, '-');
 
     try {
       const apiUrl = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}`;
       const res = await fetch(apiUrl);
       const j = await res.json();
 
-      if (!j.data) throw new Error("API Limit");
-
       const v = j.data.values;
       return new Response(JSON.stringify({
         city: cityName,
-        lat: lat,
-        lon: lon,
+        slug: citySlug,
+        lat: parseFloat(lat).toFixed(2),
+        lon: parseFloat(lon).toFixed(2),
         temp: Math.round(v.temperature),
         feelsLike: Math.round(v.temperatureApparent),
         uv: v.uvIndex,
@@ -36,7 +38,7 @@ export default {
       }), { headers: corsHeaders });
 
     } catch (e) {
-      return new Response(JSON.stringify({ error: "Rate Limited", temp: "--" }), { status: 429, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Rate Limited" }), { status: 429, headers: corsHeaders });
     }
   }
 };
