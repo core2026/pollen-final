@@ -16,16 +16,16 @@ export default {
     
     let cityName = urlParams.get("city") || cf.city || "San Antonio";
 
-    // Reverse Geocode attempt
     if (urlParams.get("lat")) {
       try {
         const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`, {
-          headers: { "User-Agent": "AcekallasDash/1.6" }
+          headers: { "User-Agent": "AcekallasDash/1.7" }
         });
         const geoData = await geoRes.json();
-        cityName = geoData.address.neighborhood || geoData.address.suburb || geoData.address.city || geoData.address.town || `GPS: ${lat}, ${lon}`;
+        // Try to get a real name, otherwise format the coordinates nicely
+        cityName = geoData.address.neighborhood || geoData.address.suburb || geoData.address.city || `Precise Loc: ${lat}, ${lon}`;
       } catch (e) {
-        cityName = `GPS: ${lat}, ${lon}`;
+        cityName = `Precise Loc: ${lat}, ${lon}`;
       }
     }
 
