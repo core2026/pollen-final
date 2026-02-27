@@ -11,10 +11,10 @@ export default {
     const urlParams = new URL(request.url).searchParams;
     const cf = request.cf || {};
     
-    const lat = parseFloat(urlParams.get("lat") || cf.latitude || "29.7408").toFixed(4);
-    const lon = parseFloat(urlParams.get("lon") || cf.longitude || "-98.6444").toFixed(4);
+    const lat = parseFloat(urlParams.get("lat") || cf.latitude || "29.74").toFixed(4);
+    const lon = parseFloat(urlParams.get("lon") || cf.longitude || "-98.64").toFixed(4);
     
-    // PRIORITY: 1. Manual name from search, 2. Cloudflare City, 3. Default
+    // 1. Determine City Name Priority
     let cityName = urlParams.get("name") || cf.city || "San Antonio";
 
     try {
@@ -24,33 +24,47 @@ export default {
         fetch(`https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0`)
       ]);
 
+      let weatherData = {};
+      let sunData = {};
+
+      // 2. Safely Extract Weather Data
       if (wRes.status === "fulfilled") {
         const wJson = await wRes.value.json();
-        // If we DON'T have a manual search name, try Tomorrow.io's detailed name
+        weatherData = wJson.data?.values || {};
+        
+        // If we didn't search by ZIP, use Tomorrow.io's name if available
         if (!urlParams.get("name") && wJson.data?.location?.name) {
           cityName = wJson.data.location.name.split(',')[0].trim();
         }
       }
 
-      let weatherData = wRes.status === "fulfilled" ? (await wRes.value.json()).data?.values : {};
-      let sunData = sRes.status === "fulfilled" ? (await sRes.value.json()).results : {};
+      // 3. Safely Extract Sun Data
+      if (sRes.status === "fulfilled") {
+        const sJson = await sRes.value.json();
+        sunData = sJson.results || {};
+      }
 
-      return new Response(JSON.stringify({
+      // 4. Build Final Payload (with "Safety Fallbacks")
+      const payload = {
         city: cityName,
         lat: lat,
         lon: lon,
-        temp: Math.round(weatherData.temperature || 0),
-        feelsLike: Math.round(weatherData.temperatureApparent || 0),
+        temp: weatherData.temperature !== undefined ? Math.round(weatherData.temperature) : "--",
+        feelsLike: weatherData.temperatureApparent !== undefined ? Math.round(weatherData.temperatureApparent) : "--",
         uv: weatherData.uvIndex || 0,
         humidity: weatherData.humidity || 0,
-        wind: Math.round(weatherData.windSpeed || 0),
-        sunrise: sunData.sunrise,
-        sunset: sunData.sunset,
+        wind: weatherData.windSpeed !== undefined ? Math.round(weatherData.windSpeed) : 0,
+        sunrise: sunData.sunrise || null,
+        sunset: sunData.sunset || null,
         isPrecise: !!urlParams.get("lat"),
         updated: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-      }), { headers: corsHeaders });
+      };
+
+      return new Response(JSON.stringify(payload), { headers: corsHeaders });
+
     } catch (err) {
-      return new Response(JSON.stringify({ error: "Error", city: cityName }), { headers: corsHeaders });
+      // Return something so the frontend doesn't hang
+      return new Response(JSON.stringify({ error: "Worker Error", city: cityName }), { headers: corsHeaders });
     }
   }
 };
