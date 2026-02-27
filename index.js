@@ -13,7 +13,6 @@ export default {
     
     const lat = parseFloat(urlParams.get("lat") || cf.latitude || "29.7408").toFixed(4);
     const lon = parseFloat(urlParams.get("lon") || cf.longitude || "-98.6444").toFixed(4);
-    
     let cityName = urlParams.get("name") || cf.city || "San Antonio";
 
     try {
@@ -40,9 +39,7 @@ export default {
       }
 
       return new Response(JSON.stringify({
-        city: cityName,
-        lat: lat,
-        lon: lon,
+        city: cityName, lat, lon,
         temp: weatherData.temperature !== undefined ? Math.round(weatherData.temperature) : "--",
         feelsLike: weatherData.temperatureApparent !== undefined ? Math.round(weatherData.temperatureApparent) : "--",
         uv: weatherData.uvIndex || 0,
@@ -54,7 +51,7 @@ export default {
         updated: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
       }), { headers: corsHeaders });
     } catch (err) {
-      return new Response(JSON.stringify({ error: "Worker Error", city: cityName }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Sync Error", city: cityName }), { headers: corsHeaders });
     }
   }
 };
