@@ -11,48 +11,35 @@ export default {
     const urlParams = new URL(request.url).searchParams;
     const cf = request.cf || {};
     
-    // Cleaning coordinates to exactly 4 decimal places for map compatibility
     const lat = parseFloat(urlParams.get("lat") || cf.latitude || "29.7408").toFixed(4);
     const lon = parseFloat(urlParams.get("lon") || cf.longitude || "-98.6444").toFixed(4);
     let cityName = urlParams.get("name") || cf.city || "San Antonio";
 
     try {
-      const apiKey = env.TOMORROW_API_KEY;
-      const [wRes, sRes] = await Promise.allSettled([
-        fetch(`https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`),
-        fetch(`https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0`)
-      ]);
+      // Use the Timeline endpoint for better stability in 2026
+      const apiUrl = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}`;
+      
+      const response = await fetch(apiUrl, { headers: { "Accept": "application/json" } });
+      const wJson = await response.json();
 
-      let weatherData = {};
-      let sunData = {};
+      // Deep data extraction with safety fallbacks
+      const data = wJson.data?.values || {};
+      
+      const payload = {
+        city: cityName,
+        lat, lon,
+        temp: data.temperature != null ? Math.round(data.temperature) : 0,
+        feelsLike: data.temperatureApparent != null ? Math.round(data.temperatureApparent) : 0,
+        uv: data.uvIndex || 0,
+        humidity: Math.round(data.humidity || 0),
+        wind: Math.round(data.windSpeed || 0),
+        updated: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        isPrecise: !!urlParams.get("lat")
+      };
 
-      if (wRes.status === "fulfilled") {
-        const wJson = await wRes.value.json();
-        weatherData = wJson.data?.values || {};
-        if (!urlParams.get("name") && wJson.data?.location?.name) {
-          cityName = wJson.data.location.name.split(',')[0].trim();
-        }
-      }
-
-      if (sRes.status === "fulfilled") {
-        const sJson = await sRes.value.json();
-        sunData = sJson.results || {};
-      }
-
-      return new Response(JSON.stringify({
-        city: cityName, lat, lon,
-        temp: weatherData.temperature !== undefined ? Math.round(weatherData.temperature) : "--",
-        feelsLike: weatherData.temperatureApparent !== undefined ? Math.round(weatherData.temperatureApparent) : "--",
-        uv: weatherData.uvIndex || 0,
-        humidity: Math.round(weatherData.humidity || 0),
-        wind: Math.round(weatherData.windSpeed || 0),
-        sunrise: sunData.sunrise || null,
-        sunset: sunData.sunset || null,
-        isPrecise: !!urlParams.get("lat"),
-        updated: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-      }), { headers: corsHeaders });
+      return new Response(JSON.stringify(payload), { headers: corsHeaders });
     } catch (err) {
-      return new Response(JSON.stringify({ error: "API Error", city: cityName }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "API Timeout", temp: "--" }), { headers: corsHeaders });
     }
   }
 };
