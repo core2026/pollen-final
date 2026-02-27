@@ -11,10 +11,9 @@ export default {
     const urlParams = new URL(request.url).searchParams;
     const cf = request.cf || {};
     
-    const lat = parseFloat(urlParams.get("lat") || cf.latitude || "29.74").toFixed(4);
-    const lon = parseFloat(urlParams.get("lon") || cf.longitude || "-98.64").toFixed(4);
+    const lat = parseFloat(urlParams.get("lat") || cf.latitude || "29.7408").toFixed(4);
+    const lon = parseFloat(urlParams.get("lon") || cf.longitude || "-98.6444").toFixed(4);
     
-    // 1. Determine City Name Priority
     let cityName = urlParams.get("name") || cf.city || "San Antonio";
 
     try {
@@ -27,24 +26,19 @@ export default {
       let weatherData = {};
       let sunData = {};
 
-      // 2. Safely Extract Weather Data
       if (wRes.status === "fulfilled") {
         const wJson = await wRes.value.json();
         weatherData = wJson.data?.values || {};
-        
-        // If we didn't search by ZIP, use Tomorrow.io's name if available
         if (!urlParams.get("name") && wJson.data?.location?.name) {
           cityName = wJson.data.location.name.split(',')[0].trim();
         }
       }
 
-      // 3. Safely Extract Sun Data
       if (sRes.status === "fulfilled") {
         const sJson = await sRes.value.json();
         sunData = sJson.results || {};
       }
 
-      // 4. Build Final Payload (with "Safety Fallbacks")
       const payload = {
         city: cityName,
         lat: lat,
@@ -61,9 +55,7 @@ export default {
       };
 
       return new Response(JSON.stringify(payload), { headers: corsHeaders });
-
     } catch (err) {
-      // Return something so the frontend doesn't hang
       return new Response(JSON.stringify({ error: "Worker Error", city: cityName }), { headers: corsHeaders });
     }
   }
