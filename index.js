@@ -11,31 +11,37 @@ export default {
     const urlParams = new URL(request.url).searchParams;
     const cf = request.cf || {};
     
+    // Standardize coordinates
     const lat = parseFloat(urlParams.get("lat") || cf.latitude || "29.74").toFixed(4);
     const lon = parseFloat(urlParams.get("lon") || cf.longitude || "-98.64").toFixed(4);
     
+    // Default city name from Cloudflare Edge
     let cityName = urlParams.get("city") || cf.city || "San Antonio";
 
-    if (urlParams.get("lat")) {
-      try {
-        const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`, {
-          headers: { "User-Agent": "AcekallasDash/1.7" }
-        });
-        const geoData = await geoRes.json();
-        // Try to get a real name, otherwise format the coordinates nicely
-        cityName = geoData.address.neighborhood || geoData.address.suburb || geoData.address.city || `Precise Loc: ${lat}, ${lon}`;
-      } catch (e) {
-        cityName = `Precise Loc: ${lat}, ${lon}`;
-      }
-    }
-
     try {
+      const apiKey = env.TOMORROW_API_KEY;
+      
+      // We fetch weather and include 'location' details to get the city name
       const [wRes, sRes] = await Promise.allSettled([
-        fetch(`https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}`),
+        fetch(`https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`),
         fetch(`https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0`)
       ]);
 
-      let weatherData = wRes.status === "fulfilled" ? (await wRes.value.json()).data?.values : {};
+      let weatherData = {};
+      if (wRes.status === "fulfilled") {
+        const wJson = await wRes.value.json();
+        weatherData = wJson.data?.values || {};
+        
+        // If we have GPS, we try to override the city name with the neighborhood from Tomorrow.io
+        // This is much more reliable than the previous free service
+        if (urlParams.get("lat")) {
+           // Tomorrow.io sometimes provides a 'location' object with a name
+           if (wJson.data?.location?.name) {
+             cityName = wJson.data.location.name.split(',')[0]; 
+           }
+        }
+      }
+
       let sunData = sRes.status === "fulfilled" ? (await sRes.value.json()).results : {};
 
       const payload = {
@@ -55,7 +61,7 @@ export default {
 
       return new Response(JSON.stringify(payload), { headers: corsHeaders });
     } catch (err) {
-      return new Response(JSON.stringify({ error: "API Timeout", city: cityName }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Sync Error", city: cityName }), { headers: corsHeaders });
     }
   }
 };
