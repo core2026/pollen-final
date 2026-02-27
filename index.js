@@ -11,17 +11,17 @@ export default {
     const urlParams = new URL(request.url).searchParams;
     const cf = request.cf || {};
     
-    // Standardize coordinates
-    const lat = parseFloat(urlParams.get("lat") || cf.latitude || "29.74").toFixed(4);
-    const lon = parseFloat(urlParams.get("lon") || cf.longitude || "-98.64").toFixed(4);
+    // Standardize coordinates to 4 decimal places for API stability
+    const lat = parseFloat(urlParams.get("lat") || cf.latitude || "29.7408").toFixed(4);
+    const lon = parseFloat(urlParams.get("lon") || cf.longitude || "-98.6444").toFixed(4);
     
-    // Default city name from Cloudflare Edge
+    // Initial city name guess from Cloudflare Edge
     let cityName = urlParams.get("city") || cf.city || "San Antonio";
 
     try {
       const apiKey = env.TOMORROW_API_KEY;
       
-      // We fetch weather and include 'location' details to get the city name
+      // Fetch Weather and Sun data in parallel for speed
       const [wRes, sRes] = await Promise.allSettled([
         fetch(`https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`),
         fetch(`https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0`)
@@ -32,13 +32,10 @@ export default {
         const wJson = await wRes.value.json();
         weatherData = wJson.data?.values || {};
         
-        // If we have GPS, we try to override the city name with the neighborhood from Tomorrow.io
-        // This is much more reliable than the previous free service
-        if (urlParams.get("lat")) {
-           // Tomorrow.io sometimes provides a 'location' object with a name
-           if (wJson.data?.location?.name) {
-             cityName = wJson.data.location.name.split(',')[0]; 
-           }
+        // Use Tomorrow.io's built-in geocoding to get a clean city name
+        if (wJson.data?.location?.name) {
+          // Extracts "San Antonio" from "San Antonio, Texas, United States"
+          cityName = wJson.data.location.name.split(',')[0].trim();
         }
       }
 
