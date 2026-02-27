@@ -1,63 +1,114 @@
-export default {
-  async fetch(request, env) {
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    };
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Acekallas Weather</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root { --bg: #0b1120; --text: #f8fafc; --card: rgba(30, 41, 59, 0.4); --label: #94a3b8; --accent: #38bdf8; --alert: #ef4444; --warning: #f59e0b; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); color: var(--text); padding: 15px; margin: 0; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 480px; padding-bottom: 60px; }
+        .header { display: flex; justify-content: space-between; margin-bottom: 20px; align-items: center; }
+        #gps-btn { background: var(--card); color: var(--text); border: 1px solid rgba(255,255,255,0.1); padding: 14px; border-radius: 16px; width: 100%; margin-top: 10px; cursor: pointer; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .pulse-warning { background: var(--warning) !important; color: #000 !important; animation: p-ring 1.5s infinite; }
+        @keyframes p-ring { 0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); } 70% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); } }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .card { background: var(--card); padding: 18px; border-radius: 24px; border: 1px solid rgba(255,255,255,0.05); backdrop-filter: blur(10px); }
+        .map-card { grid-column: span 2; height: 320px; border-radius: 24px; overflow: hidden; background: #000; margin-top: 5px; }
+        iframe { width: 100%; height: 100%; border: none; }
+        .val { font-size: 1.3rem; font-weight: 800; display: block; margin: 4px 0; }
+        .label { font-size: 0.65rem; text-transform: uppercase; color: var(--label); font-weight: 800; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div style="flex:1;">
+            <div style="display:flex; align-items:center;"><h1 id="city-title" style="margin:0;">...</h1><span id="proxy-badge" style="display:none; font-size:9px; background:var(--warning); color:#000; padding:4px 8px; border-radius:6px; margin-left:10px;">RELAY ACTIVE</span></div>
+            <button id="gps-btn" onclick="getGPS()"><i data-lucide="map-pin"></i><span id="gps-text">Checking Location...</span></button>
+        </div>
+    </div>
 
-    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+    <div class="grid">
+        <div class="card" style="grid-column: span 2;"><span id="wash-text">Analyzing...</span></div>
+        <div class="card"><span class="label">Temp</span><span class="val" id="temp">--°</span><span class="label" id="feels">Feels --°</span></div>
+        <div class="card"><span class="label" id="sun-label">Sun Left</span><span class="val" id="sun-val">--</span><span class="label" id="sun-sub">...</span></div>
+        <div class="card"><span class="label">Pollen</span><span class="val" id="tree">--</span><span class="label">Tree Level</span></div>
+        <div class="card"><span class="label">Comfort</span><span class="val" id="hum-val">--%</span><span class="label" id="hum-desc">--</span></div>
+        <div class="card"><span class="label">UV Index</span><span class="val" id="uv">--</span><span class="label">Burn Risk</span></div>
+        <div class="card"><span class="label">Wind</span><span class="val" id="wind">-- mph</span><span class="label">Surface</span></div>
 
-    const urlParams = new URL(request.url).searchParams;
-    const cf = request.cf || {};
-    const lat = urlParams.get("lat") || cf.latitude || "29.74"; 
-    const lon = urlParams.get("lon") || cf.longitude || "-98.64";
-    let cityName = urlParams.get("city") || cf.city || "Fair Oaks Ranch";
+        <span class="label" style="margin-top:20px;">🌿 Local Pollen (National Map)</span>
+        <div class="map-card"><iframe id="pollen-frame"></iframe></div>
+        
+        <span class="label" style="margin-top:10px;">🌧️ Live Rain Radar</span>
+        <div class="map-card"><iframe id="rain-frame"></iframe></div>
 
-    // Reverse Geocode if GPS is used
-    if (urlParams.get("lat")) {
-      try {
-        const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`, {
-            headers: { "User-Agent": "AcekallasWeather/1.1" }
-        });
-        const geoData = await geoRes.json();
-        cityName = geoData.address.city || geoData.address.town || geoData.address.village || "Precise Location";
-      } catch (e) { cityName = "GPS Location"; }
+        <span class="label" style="margin-top:10px;">🌬️ Live Wind Flow</span>
+        <div class="map-card"><iframe id="wind-frame"></iframe></div>
+    </div>
+    <div id="updated" style="text-align:center; margin-top:30px; font-size:10px; color:var(--label);">...</div>
+</div>
+
+<script>
+    async function getGPS() {
+        document.getElementById('gps-text').innerText = "Locating...";
+        navigator.geolocation.getCurrentPosition(p => update(p.coords.latitude, p.coords.longitude));
     }
 
-    try {
-      const apiKey = env.TOMORROW_API_KEY; 
-      const [weatherRes, sunRes, alertRes] = await Promise.all([
-        fetch(`https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`),
-        fetch(`https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0`),
-        fetch(`https://api.weather.gov/alerts/active?point=${lat},${lon}`, { headers: { "User-Agent": "Acekallas" } })
-      ]);
+    async function update(lat = null, lon = null) {
+        try {
+            let url = "https://pollen-data.acekallas.com" + (lat ? `?lat=${lat}&lon=${lon}` : "");
+            const r = await fetch(url);
+            const d = await r.json();
+            
+            document.getElementById('city-title').innerText = d.city;
+            document.getElementById('temp').innerText = d.temp + "°";
+            document.getElementById('feels').innerText = "Feels " + d.feelsLike + "°";
+            document.getElementById('hum-val').innerText = d.humidity + "%";
+            document.getElementById('uv').innerText = d.uv;
+            document.getElementById('wind').innerText = Math.round(d.wind) + " mph";
+            document.getElementById('updated').innerText = "Sync: " + d.updated;
 
-      const wData = await weatherRes.json();
-      const sData = await sunRes.json();
-      const aData = await alertRes.json();
-      
-      const v = wData?.data?.values || {};
-      const alerts = aData?.features || [];
+            // Pollen Text Logic
+            const pLevels = ["None", "Low", "Low", "Medium", "High", "Very High"];
+            document.getElementById('tree').innerText = pLevels[Math.round(d.tree)] || "Low";
+            document.getElementById('wash-text').innerText = (d.uv > 1 && d.wind < 15) ? "✨ Perfect Day for a Wash" : "⚠️ Skip the Wash Today";
 
-      return new Response(JSON.stringify({
-        city: cityName,
-        lat, lon,
-        temp: v.temperature != null ? Math.round(v.temperature) : "--",
-        feelsLike: v.temperatureApparent != null ? Math.round(v.temperatureApparent) : "--",
-        uv: v.uvIndex || 0,
-        tree: v.treeIndex || 0,
-        humidity: v.humidity || 0,
-        wind: v.windSpeed || 0,
-        sunrise: sData?.results?.sunrise || null,
-        sunset: sData?.results?.sunset || null,
-        activeAlert: alerts[0]?.properties?.headline || null,
-        isProxy: (cf.asOrganization || "").includes("Apple") || (cf.asOrganization || "").includes("Cloudflare"),
-        isPrecise: !!urlParams.get("lat"),
-        updated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    } catch (err) {
-      return new Response(JSON.stringify({ error: "Sync Error" }), { status: 500, headers: corsHeaders });
+            // Solar Logic
+            if (d.sunset && d.sunrise) {
+                const sunset = new Date(d.sunset), sunrise = new Date(d.sunrise), now = new Date();
+                let target = (now < sunset && now > sunrise) ? sunset : sunrise;
+                if (now > sunrise && target === sunrise) target.setDate(target.getDate() + 1);
+                const diff = target - now;
+                document.getElementById('sun-val').innerText = `${Math.floor(diff/3600000)}h ${Math.round((diff%3600000)/60000)}m`;
+                document.getElementById('sun-label').innerText = (now < sunset && now > sunrise) ? "Sun Left" : "Dark Left";
+                document.getElementById('sun-sub').innerText = (now < sunset && now > sunrise) ? "Until Sunset" : "Until Sunrise";
+            }
+
+            // GPS UI
+            const btn = document.getElementById('gps-btn');
+            if(d.isPrecise) {
+                btn.classList.remove('pulse-warning');
+                btn.style.background = "#22c55e"; 
+                document.getElementById('gps-text').innerText = "Location Verified";
+            } else if (d.isProxy) {
+                document.getElementById('proxy-badge').style.display = 'inline-block';
+                btn.classList.add('pulse-warning');
+                document.getElementById('gps-text').innerText = "Not your location? Click here";
+            }
+
+            // Maps - Replaced WeatherBug with Windy's specialized overlays
+            document.getElementById('pollen-frame').src = `https://embed.windy.com/embed2.html?lat=${d.lat}&lon=${d.lon}&zoom=5&overlay=cosc&metricWind=mph`; // 'cosc' is Air Quality/Particulates (best iframe pollen approx)
+            document.getElementById('rain-frame').src = `https://embed.windy.com/embed2.html?lat=${d.lat}&lon=${d.lon}&zoom=8&overlay=radar`;
+            document.getElementById('wind-frame').src = `https://embed.windy.com/embed2.html?lat=${d.lat}&lon=${d.lon}&zoom=5&overlay=wind`;
+
+            lucide.createIcons();
+        } catch(e) { console.error(e); }
     }
-  }
-};
+    update();
+</script>
+</body>
+</html>
