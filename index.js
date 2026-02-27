@@ -15,7 +15,10 @@ export default {
 
     if (response) {
       console.log("Cache Hit!");
-      return response;
+      // Pass through with cache hit header visible to client
+      const cachedHeaders = new Headers(response.headers);
+      cachedHeaders.set("X-Cache", "HIT");
+      return new Response(response.body, { headers: cachedHeaders });
     }
 
     // 2. If not in cache, do the work
@@ -34,11 +37,15 @@ export default {
       if (!j.data) throw new Error("API Limit");
 
       const v = j.data.values;
-      
-      // FIX: Improved time offset to Central Time (UTC-6)
-      const now = new Date();
-      const centralTime = new Date(now.getTime() - (now.getTimezoneOffset() * 60000) - (6 * 60 * 60 * 1000));
-      const formattedTime = centralTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+      // FIX: Use Intl.DateTimeFormat for proper Central Time with automatic DST support
+      // Workers always run in UTC, so getTimezoneOffset() is always 0 — don't use it.
+      const formattedTime = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Chicago',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      }).format(new Date());
 
       const data = JSON.stringify({
         city: cityName,
@@ -53,22 +60,29 @@ export default {
         updated: formattedTime
       });
 
-      // 3. Create a response and set it to cache for 10 minutes (600 seconds)
-      response = new Response(data, { 
-        headers: { 
-          ...corsHeaders, 
+      // 3. Create response — cache for 10 minutes at edge AND browser
+      response = new Response(data, {
+        headers: {
+          ...corsHeaders,
           "Content-Type": "application/json",
-          "Cache-Control": "s-maxage=600" 
-        } 
+          // s-maxage: Cloudflare edge cache TTL
+          // max-age: browser cache TTL (reduces repeated Worker invocations)
+          "Cache-Control": "public, s-maxage=600, max-age=600",
+          "X-Cache": "MISS"
+        }
       });
 
-      // Store in cache while sending it to the user
+      // Store in Cloudflare Cache API while returning to user
       ctx.waitUntil(cache.put(cacheKey, response.clone()));
 
       return response;
 
     } catch (e) {
-      return new Response(JSON.stringify({ error: "Service Busy" }), { status: 429, headers: corsHeaders });
+      console.error("Worker error:", e.message);
+      return new Response(JSON.stringify({ error: "Service Busy" }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
     }
   }
 };
