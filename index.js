@@ -35,8 +35,9 @@ export default {
 
       const v = j.data.values;
       
-      // FIX: Adjust time offset to Central Time (UTC-6)
-      const centralTime = new Date(new Date().getTime() - (6 * 60 * 60 * 1000));
+      // FIX: Improved time offset to Central Time (UTC-6)
+      const now = new Date();
+      const centralTime = new Date(now.getTime() - (now.getTimezoneOffset() * 60000) - (6 * 60 * 60 * 1000));
       const formattedTime = centralTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
       const data = JSON.stringify({
