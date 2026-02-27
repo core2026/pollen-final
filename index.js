@@ -1,5 +1,5 @@
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -8,14 +8,22 @@ export default {
 
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+    // 1. Check the Cache first
+    const cache = caches.default;
+    const cacheKey = new Request(request.url, request);
+    let response = await cache.match(cacheKey);
+
+    if (response) {
+      console.log("Cache Hit!");
+      return response;
+    }
+
+    // 2. If not in cache, do the work
     const urlParams = new URL(request.url).searchParams;
     const cf = request.cf || {};
-    
     const lat = urlParams.get("lat") || cf.latitude || "29.7408";
     const lon = urlParams.get("lon") || cf.longitude || "-98.6444";
     const cityName = urlParams.get("name") || cf.city || "San Antonio";
-    
-    // Create a URL-friendly slug for the widget (e.g., "San Antonio" -> "san-antonio")
     const citySlug = cityName.toLowerCase().replace(/\s+/g, '-');
 
     try {
@@ -23,8 +31,10 @@ export default {
       const res = await fetch(apiUrl);
       const j = await res.json();
 
+      if (!j.data) throw new Error("API Limit");
+
       const v = j.data.values;
-      return new Response(JSON.stringify({
+      const data = JSON.stringify({
         city: cityName,
         slug: citySlug,
         lat: parseFloat(lat).toFixed(2),
@@ -35,10 +45,24 @@ export default {
         humidity: Math.round(v.humidity),
         wind: Math.round(v.windSpeed),
         updated: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-      }), { headers: corsHeaders });
+      });
+
+      // 3. Create a response and set it to cache for 10 minutes (600 seconds)
+      response = new Response(data, { 
+        headers: { 
+          ...corsHeaders, 
+          "Content-Type": "application/json",
+          "Cache-Control": "s-maxage=600" 
+        } 
+      });
+
+      // Store in cache while sending it to the user
+      ctx.waitUntil(cache.put(cacheKey, response.clone()));
+
+      return response;
 
     } catch (e) {
-      return new Response(JSON.stringify({ error: "Rate Limited" }), { status: 429, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Service Busy" }), { status: 429, headers: corsHeaders });
     }
   }
 };
