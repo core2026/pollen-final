@@ -39,7 +39,7 @@ export default {
         sunData = sJson.results || {};
       }
 
-      const payload = {
+      return new Response(JSON.stringify({
         city: cityName,
         lat: lat,
         lon: lon,
@@ -52,9 +52,7 @@ export default {
         sunset: sunData.sunset || null,
         isPrecise: !!urlParams.get("lat"),
         updated: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-      };
-
-      return new Response(JSON.stringify(payload), { headers: corsHeaders });
+      }), { headers: corsHeaders });
     } catch (err) {
       return new Response(JSON.stringify({ error: "Worker Error", city: cityName }), { headers: corsHeaders });
     }
