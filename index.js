@@ -11,6 +11,7 @@ export default {
     const urlParams = new URL(request.url).searchParams;
     const cf = request.cf || {};
     
+    // Cleaning coordinates to exactly 4 decimal places for map compatibility
     const lat = parseFloat(urlParams.get("lat") || cf.latitude || "29.7408").toFixed(4);
     const lon = parseFloat(urlParams.get("lon") || cf.longitude || "-98.6444").toFixed(4);
     let cityName = urlParams.get("name") || cf.city || "San Antonio";
@@ -43,15 +44,15 @@ export default {
         temp: weatherData.temperature !== undefined ? Math.round(weatherData.temperature) : "--",
         feelsLike: weatherData.temperatureApparent !== undefined ? Math.round(weatherData.temperatureApparent) : "--",
         uv: weatherData.uvIndex || 0,
-        humidity: weatherData.humidity || 0,
-        wind: weatherData.windSpeed !== undefined ? Math.round(weatherData.windSpeed) : 0,
+        humidity: Math.round(weatherData.humidity || 0),
+        wind: Math.round(weatherData.windSpeed || 0),
         sunrise: sunData.sunrise || null,
         sunset: sunData.sunset || null,
         isPrecise: !!urlParams.get("lat"),
         updated: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
       }), { headers: corsHeaders });
     } catch (err) {
-      return new Response(JSON.stringify({ error: "Sync Error", city: cityName }), { headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "API Error", city: cityName }), { headers: corsHeaders });
     }
   }
 };
