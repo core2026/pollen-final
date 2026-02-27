@@ -17,24 +17,27 @@ export default {
     const region = cf.regionCode || "";
 
     const apiKey = env.TOMORROW_API_KEY; 
-    const weatherUrl = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`;
-    const sunUrl = `https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0`;
-
+    
     try {
-      // Fetch both Weather and Sun data simultaneously
-      const [weatherRes, sunRes] = await Promise.all([
-        fetch(weatherUrl),
-        fetch(sunUrl)
+      // 1. Weather, Sun, and NWS Alerts in parallel
+      const [weatherRes, sunRes, alertRes] = await Promise.all([
+        fetch(`https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`),
+        fetch(`https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0`),
+        fetch(`https://api.weather.gov/alerts/active?point=${lat},${lon}`, {
+          headers: { "User-Agent": "AcekallasDashboard/1.0" }
+        })
       ]);
 
       const wData = await weatherRes.json();
       const sData = await sunRes.json();
+      const aData = await alertRes.json();
       const v = wData.data.values;
 
       const month = new Date().getMonth();
       const isTexas = region === "TX" || city.includes("Fair Oaks") || city.includes("San Antonio");
+      
+      // Texas Pollen Logic
       const isOakSeason = isTexas && (month >= 1 && month <= 4); 
-
       const getLevel = (val, type) => {
         const levels = ["None", "Very Low", "Low", "Medium", "High", "Very High"];
         let label = levels[Math.round(val)] || "None";
@@ -42,12 +45,15 @@ export default {
         return label;
       };
 
-      const rainChance = v.precipitationProbability || 0;
       const treeLevel = getLevel(v.treeIndex, 'tree');
       const pollenAlert = isTexas && (v.treeIndex > 2 || treeLevel.includes("Elevated"));
+      const rainChance = v.precipitationProbability || 0;
+
+      // NWS Alert Logic
+      const activeAlert = aData.features && aData.features.length > 0 ? aData.features[0].properties.headline : null;
 
       const result = {
-        city, zip, lat, lon, isTexas,
+        city, zip, lat, lon, isTexas, activeAlert,
         temp: Math.round(v.temperature),
         feelsLike: Math.round(v.temperatureApparent),
         uv: v.uvIndex || 0,
@@ -56,7 +62,7 @@ export default {
         wind: Math.round(v.windSpeed),
         humDesc: v.humidity < 30 ? "🌵 Dry Air" : v.humidity > 65 ? "💧 Muggy" : "Comfortable",
         pollenAlert,
-        sunset: sData.results.sunset, // ISO Format from API
+        sunset: sData.results.sunset,
         washAdvice: (rainChance >= 25 || pollenAlert) ? "⚠️ Skip Wash" : "✨ Wash OK",
         washColor: (rainChance >= 25 || pollenAlert) ? "#fbbf24" : "#22c55e",
         isPrecise: !!urlParams.get("lat"),
