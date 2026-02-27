@@ -14,28 +14,18 @@ export default {
     const lat = parseFloat(urlParams.get("lat") || cf.latitude || "29.74").toFixed(4);
     const lon = parseFloat(urlParams.get("lon") || cf.longitude || "-98.64").toFixed(4);
     
-    // Default city name from Cloudflare
     let cityName = urlParams.get("city") || cf.city || "San Antonio";
 
-    // 1. Better Reverse Geocoding Logic
+    // Reverse Geocode attempt
     if (urlParams.get("lat")) {
       try {
-        // We add a cache-buster and a more specific User-Agent to prevent 403s/timeouts
-        const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`, {
-          headers: { "User-Agent": "AcekallasWeatherBot/1.5 (contact@yourdomain.com)" }
+        const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`, {
+          headers: { "User-Agent": "AcekallasDash/1.6" }
         });
         const geoData = await geoRes.json();
-        
-        // Pick the most specific name available
-        cityName = geoData.address.neighborhood || 
-                   geoData.address.suburb || 
-                   geoData.address.city || 
-                   geoData.address.town || 
-                   `Area: ${lat}, ${lon}`;
+        cityName = geoData.address.neighborhood || geoData.address.suburb || geoData.address.city || geoData.address.town || `GPS: ${lat}, ${lon}`;
       } catch (e) {
-        // If the naming service fails, we use the coordinates as the city name 
-        // so the user knows the GPS actually worked.
-        cityName = `Location: ${lat}, ${lon}`;
+        cityName = `GPS: ${lat}, ${lon}`;
       }
     }
 
@@ -55,7 +45,6 @@ export default {
         temp: weatherData.temperature !== undefined ? Math.round(weatherData.temperature) : "--",
         feelsLike: weatherData.temperatureApparent !== undefined ? Math.round(weatherData.temperatureApparent) : "--",
         uv: weatherData.uvIndex || 0,
-        tree: weatherData.treeIndex || 0,
         humidity: weatherData.humidity || 0,
         wind: weatherData.windSpeed !== undefined ? Math.round(weatherData.windSpeed) : 0,
         sunrise: sunData.sunrise || null,
