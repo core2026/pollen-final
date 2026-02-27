@@ -34,6 +34,11 @@ export default {
       if (!j.data) throw new Error("API Limit");
 
       const v = j.data.values;
+      
+      // FIX: Adjust time offset to Central Time (UTC-6)
+      const centralTime = new Date(new Date().getTime() - (6 * 60 * 60 * 1000));
+      const formattedTime = centralTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
       const data = JSON.stringify({
         city: cityName,
         slug: citySlug,
@@ -44,7 +49,7 @@ export default {
         uv: v.uvIndex,
         humidity: Math.round(v.humidity),
         wind: Math.round(v.windSpeed),
-        updated: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+        updated: formattedTime
       });
 
       // 3. Create a response and set it to cache for 10 minutes (600 seconds)
