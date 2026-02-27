@@ -6,6 +6,7 @@ export default {
       "Access-Control-Allow-Headers": "Content-Type",
     };
 
+    // Handle CORS preflight requests
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
     // 1. Check the Cache first
@@ -21,12 +22,15 @@ export default {
     // 2. If not in cache, do the work
     const urlParams = new URL(request.url).searchParams;
     const cf = request.cf || {};
+    
+    // Default location if not provided in request
     const lat = urlParams.get("lat") || cf.latitude || "29.7408";
     const lon = urlParams.get("lon") || cf.longitude || "-98.6444";
     const cityName = urlParams.get("name") || cf.city || "San Antonio";
     const citySlug = cityName.toLowerCase().replace(/\s+/g, '-');
 
     try {
+      // API call to Tomorrow.io
       const apiUrl = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}`;
       const res = await fetch(apiUrl);
       const j = await res.json();
@@ -35,11 +39,12 @@ export default {
 
       const v = j.data.values;
       
-      // FIX: Improved time offset to Central Time (UTC-6)
+      // Improved time offset to Central Time (UTC-6)
       const now = new Date();
       const centralTime = new Date(now.getTime() - (now.getTimezoneOffset() * 60000) - (6 * 60 * 60 * 1000));
       const formattedTime = centralTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
+      // Structure the data to send to the frontend
       const data = JSON.stringify({
         city: cityName,
         slug: citySlug,
@@ -68,6 +73,7 @@ export default {
       return response;
 
     } catch (e) {
+      // Fallback for errors (API limits, downtime)
       return new Response(JSON.stringify({ error: "Service Busy" }), { status: 429, headers: corsHeaders });
     }
   }
