@@ -10,6 +10,12 @@ export default {
 
     const urlParams = new URL(request.url).searchParams;
     const cf = request.cf || {};
+    
+    // DETECT PRIVATE RELAY / VPN
+    // Apple Private Relay usually shows up with specific ASNs or "Apple Inc"
+    const asName = cf.asOrganization || "";
+    const isProxy = asName.includes("Apple") || asName.includes("Google") || asName.includes("Cloudflare") || asName.includes("Proxy");
+
     const lat = urlParams.get("lat") || cf.latitude || "29.74"; 
     const lon = urlParams.get("lon") || cf.longitude || "-98.64";
     const city = urlParams.get("city") || cf.city || "Local Area";
@@ -28,42 +34,25 @@ export default {
       const wData = await weatherRes.json();
       const sData = await sunRes.json();
       const aData = await alertRes.json();
-      const v = wData.data.values;
-
+      
       const formatter = new Intl.DateTimeFormat('en-US', {
         timeZone: 'America/Chicago',
         hour: '2-digit', minute: '2-digit', hour12: true
       });
-      const localUpdate = formatter.format(new Date());
-
-      const month = new Date().getMonth();
-      const isTexas = cf.regionCode === "TX" || city.includes("Fair Oaks");
-      const isOakSeason = isTexas && (month >= 1 && month <= 4); 
-
-      const getLevel = (val, type) => {
-        const levels = ["None", "Very Low", "Low", "Medium", "High", "Very High"];
-        let label = levels[Math.round(val)] || "None";
-        if (type === 'tree' && isOakSeason && val < 2) label = "Elevated (Oak)";
-        return label;
-      };
 
       const result = {
-        city, lat, lon, isTexas,
+        city, lat, lon, isProxy,
         activeAlert: aData.features?.[0]?.properties?.headline || null,
-        temp: Math.round(v.temperature),
-        feelsLike: Math.round(v.temperatureApparent),
-        uv: v.uvIndex || 0,
-        tree: getLevel(v.treeIndex, 'tree'),
-        humidity: v.humidity,
-        wind: Math.round(v.windSpeed),
-        humDesc: v.humidity < 30 ? "🌵 Dry Air" : v.humidity > 65 ? "💧 Muggy" : "Comfortable",
-        pollenAlert: isTexas && (v.treeIndex > 2),
-        sunrise: sData.results.sunrise, // Added sunrise
-        sunset: sData.results.sunset, 
-        washAdvice: (v.precipitationProbability >= 25 || (isTexas && v.treeIndex > 2)) ? "⚠️ Skip Wash" : "✨ Wash OK",
-        washColor: (v.precipitationProbability >= 25 || (isTexas && v.treeIndex > 2)) ? "#fbbf24" : "#22c55e",
+        temp: Math.round(wData.data.values.temperature),
+        feelsLike: Math.round(wData.data.values.temperatureApparent),
+        uv: wData.data.values.uvIndex || 0,
+        tree: wData.data.values.treeIndex, // Sending raw index for better logic
+        humidity: wData.data.values.humidity,
+        wind: Math.round(wData.data.values.windSpeed),
+        sunrise: sData.results.sunrise,
+        sunset: sData.results.sunset,
         isPrecise: !!urlParams.get("lat"),
-        updated: localUpdate
+        updated: formatter.format(new Date())
       };
 
       return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
