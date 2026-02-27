@@ -11,50 +11,32 @@ export default {
     const urlParams = new URL(request.url).searchParams;
     const cf = request.cf || {};
     
-    const lat = parseFloat(urlParams.get("lat") || cf.latitude || "29.7408").toFixed(4);
-    const lon = parseFloat(urlParams.get("lon") || cf.longitude || "-98.6444").toFixed(4);
-    
-    let cityName = urlParams.get("name") || cf.city || "San Antonio";
+    const lat = urlParams.get("lat") || cf.latitude || "29.7408";
+    const lon = urlParams.get("lon") || cf.longitude || "-98.6444";
+    const cityName = urlParams.get("name") || cf.city || "San Antonio";
 
     try {
-      const apiKey = env.TOMORROW_API_KEY;
-      const [wRes, sRes] = await Promise.allSettled([
-        fetch(`https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`),
-        fetch(`https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0`)
-      ]);
+      const apiUrl = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}`;
+      const res = await fetch(apiUrl);
+      const j = await res.json();
 
-      let weatherData = {};
-      let sunData = {};
+      if (!j.data) throw new Error("API Limit");
 
-      if (wRes.status === "fulfilled") {
-        const wJson = await wRes.value.json();
-        weatherData = wJson.data?.values || {};
-        if (!urlParams.get("name") && wJson.data?.location?.name) {
-          cityName = wJson.data.location.name.split(',')[0].trim();
-        }
-      }
-
-      if (sRes.status === "fulfilled") {
-        const sJson = await sRes.value.json();
-        sunData = sJson.results || {};
-      }
-
+      const v = j.data.values;
       return new Response(JSON.stringify({
         city: cityName,
         lat: lat,
         lon: lon,
-        temp: weatherData.temperature !== undefined ? Math.round(weatherData.temperature) : "--",
-        feelsLike: weatherData.temperatureApparent !== undefined ? Math.round(weatherData.temperatureApparent) : "--",
-        uv: weatherData.uvIndex || 0,
-        humidity: weatherData.humidity || 0,
-        wind: weatherData.windSpeed !== undefined ? Math.round(weatherData.windSpeed) : 0,
-        sunrise: sunData.sunrise || null,
-        sunset: sunData.sunset || null,
-        isPrecise: !!urlParams.get("lat"),
+        temp: Math.round(v.temperature),
+        feelsLike: Math.round(v.temperatureApparent),
+        uv: v.uvIndex,
+        humidity: Math.round(v.humidity),
+        wind: Math.round(v.windSpeed),
         updated: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
       }), { headers: corsHeaders });
-    } catch (err) {
-      return new Response(JSON.stringify({ error: "Worker Error", city: cityName }), { headers: corsHeaders });
+
+    } catch (e) {
+      return new Response(JSON.stringify({ error: "Rate Limited", temp: "--" }), { status: 429, headers: corsHeaders });
     }
   }
 };
