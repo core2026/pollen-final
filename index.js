@@ -13,7 +13,6 @@ export default {
     const lat = urlParams.get("lat") || cf.latitude || "29.74"; 
     const lon = urlParams.get("lon") || cf.longitude || "-98.64";
     const city = urlParams.get("city") || cf.city || "Local Area";
-    const zip = urlParams.get("zip") || cf.postalCode || "78015";
 
     const apiKey = env.TOMORROW_API_KEY; 
     
@@ -31,12 +30,9 @@ export default {
       const aData = await alertRes.json();
       const v = wData.data.values;
 
-      // TIMEZONE FIX: Force Texas Time (CST/CDT)
       const formatter = new Intl.DateTimeFormat('en-US', {
         timeZone: 'America/Chicago',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
+        hour: '2-digit', minute: '2-digit', hour12: true
       });
       const localUpdate = formatter.format(new Date());
 
@@ -51,11 +47,11 @@ export default {
         return label;
       };
 
-      const rainChance = v.precipitationProbability || 0;
       const treeLevel = getLevel(v.treeIndex, 'tree');
+      const rainChance = v.precipitationProbability || 0;
       
       const result = {
-        city, zip, lat, lon, isTexas,
+        city, lat, lon, isTexas,
         activeAlert: aData.features?.[0]?.properties?.headline || null,
         temp: Math.round(v.temperature),
         feelsLike: Math.round(v.temperatureApparent),
