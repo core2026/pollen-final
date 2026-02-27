@@ -8,46 +8,50 @@ export default {
 
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-    const urlParams = new URL(request.url).searchParams;
-    const cf = request.cf || {};
-    
-    // Clean coordinates
-    const lat = parseFloat(urlParams.get("lat") || cf.latitude || "29.7408").toFixed(4);
-    const lon = parseFloat(urlParams.get("lon") || cf.longitude || "-98.6444").toFixed(4);
-    let cityName = urlParams.get("name") || cf.city || "San Antonio";
-
     try {
-      // Adding a timestamp to the URL to bypass any internal Cloudflare caching
-      const cacheBust = Date.now();
-      const apiUrl = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}&_cb=${cacheBust}`;
-      
-      const response = await fetch(apiUrl);
-      const wJson = await response.json();
+      const urlParams = new URL(request.url).searchParams;
+      const lat = urlParams.get("lat") || "29.7408";
+      const lon = urlParams.get("lon") || "-98.6444";
+      const cityName = urlParams.get("name") || "San Antonio";
 
-      if (!wJson.data) {
-        throw new Error(wJson.message || "API limit or key error");
+      if (!env.TOMORROW_API_KEY) {
+        return new Response(JSON.stringify({ error: "Missing API Key in Worker Settings" }), { status: 500, headers: corsHeaders });
       }
 
-      const values = wJson.data.values;
+      // 2026 Optimized API Call
+      const apiUrl = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}`;
+      
+      const response = await fetch(apiUrl, {
+        headers: { "Accept": "application/json", "User-Agent": "Cloudflare-Worker" }
+      });
+
+      const result = await response.json();
+
+      // If Tomorrow.io returns an error (like 429 for rate limit), catch it here
+      if (!response.ok) {
+        return new Response(JSON.stringify({ 
+          error: result.message || "Weather Provider Error", 
+          code: response.status 
+        }), { status: response.status, headers: corsHeaders });
+      }
+
+      const val = result.data.values;
       
       return new Response(JSON.stringify({
         city: cityName,
-        lat, lon,
-        temp: Math.round(values.temperature),
-        feelsLike: Math.round(values.temperatureApparent),
-        uv: values.uvIndex || 0,
-        humidity: Math.round(values.humidity),
-        wind: Math.round(values.windSpeed),
+        lat: lat,
+        lon: lon,
+        temp: Math.round(val.temperature || 0),
+        feelsLike: Math.round(val.temperatureApparent || 0),
+        uv: val.uvIndex || 0,
+        humidity: Math.round(val.humidity || 0),
+        wind: Math.round(val.windSpeed || 0),
         updated: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
         isPrecise: !!urlParams.get("lat")
       }), { headers: corsHeaders });
 
     } catch (err) {
-      // Return a 500 so the dashboard knows to retry
-      return new Response(JSON.stringify({ error: err.message, status: "fail" }), { 
-        status: 500, 
-        headers: corsHeaders 
-      });
+      return new Response(JSON.stringify({ error: "Worker Crash: " + err.message }), { status: 500, headers: corsHeaders });
     }
   }
 };
