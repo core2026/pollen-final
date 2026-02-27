@@ -47,23 +47,21 @@ export default {
         return label;
       };
 
-      const treeLevel = getLevel(v.treeIndex, 'tree');
-      const rainChance = v.precipitationProbability || 0;
-      
       const result = {
         city, lat, lon, isTexas,
         activeAlert: aData.features?.[0]?.properties?.headline || null,
         temp: Math.round(v.temperature),
         feelsLike: Math.round(v.temperatureApparent),
         uv: v.uvIndex || 0,
-        tree: treeLevel,
+        tree: getLevel(v.treeIndex, 'tree'),
         humidity: v.humidity,
         wind: Math.round(v.windSpeed),
         humDesc: v.humidity < 30 ? "🌵 Dry Air" : v.humidity > 65 ? "💧 Muggy" : "Comfortable",
-        pollenAlert: isTexas && (v.treeIndex > 2 || treeLevel.includes("Elevated")),
+        pollenAlert: isTexas && (v.treeIndex > 2),
+        sunrise: sData.results.sunrise, // Added sunrise
         sunset: sData.results.sunset, 
-        washAdvice: (rainChance >= 25 || (isTexas && v.treeIndex > 2)) ? "⚠️ Skip Wash" : "✨ Wash OK",
-        washColor: (rainChance >= 25 || (isTexas && v.treeIndex > 2)) ? "#fbbf24" : "#22c55e",
+        washAdvice: (v.precipitationProbability >= 25 || (isTexas && v.treeIndex > 2)) ? "⚠️ Skip Wash" : "✨ Wash OK",
+        washColor: (v.precipitationProbability >= 25 || (isTexas && v.treeIndex > 2)) ? "#fbbf24" : "#22c55e",
         isPrecise: !!urlParams.get("lat"),
         updated: localUpdate
       };
