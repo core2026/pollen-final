@@ -10,21 +10,19 @@ export default {
 
     const urlParams = new URL(request.url).searchParams;
     const cf = request.cf || {};
-    
-    // 1. Determine Location
     const lat = urlParams.get("lat") || cf.latitude || "29.74"; 
     const lon = urlParams.get("lon") || cf.longitude || "-98.64";
     let cityName = urlParams.get("city") || cf.city || "Fair Oaks Ranch";
 
-    // 2. If precise GPS is used, try to get the real city name via Reverse Geocoding
+    // Reverse Geocode if GPS is used
     if (urlParams.get("lat")) {
       try {
         const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`, {
-            headers: { "User-Agent": "AcekallasDashboard/1.1" }
+            headers: { "User-Agent": "AcekallasWeather/1.1" }
         });
         const geoData = await geoRes.json();
         cityName = geoData.address.city || geoData.address.town || geoData.address.village || "Precise Location";
-      } catch (e) { cityName = "Precise Location"; }
+      } catch (e) { cityName = "GPS Location"; }
     }
 
     try {
@@ -45,21 +43,21 @@ export default {
       return new Response(JSON.stringify({
         city: cityName,
         lat, lon,
-        isProxy: (cf.asOrganization || "").includes("Apple") || (cf.asOrganization || "").includes("Cloudflare"),
-        temp: v.temperature !== undefined ? Math.round(v.temperature) : "--",
-        feelsLike: v.temperatureApparent !== undefined ? Math.round(v.temperatureApparent) : "--",
+        temp: v.temperature != null ? Math.round(v.temperature) : "--",
+        feelsLike: v.temperatureApparent != null ? Math.round(v.temperatureApparent) : "--",
         uv: v.uvIndex || 0,
         tree: v.treeIndex || 0,
         humidity: v.humidity || 0,
         wind: v.windSpeed || 0,
-        sunrise: sData?.results?.sunrise,
-        sunset: sData?.results?.sunset,
+        sunrise: sData?.results?.sunrise || null,
+        sunset: sData?.results?.sunset || null,
         activeAlert: alerts[0]?.properties?.headline || null,
+        isProxy: (cf.asOrganization || "").includes("Apple") || (cf.asOrganization || "").includes("Cloudflare"),
         isPrecise: !!urlParams.get("lat"),
         updated: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     } catch (err) {
-      return new Response(JSON.stringify({ error: "API Timeout" }), { status: 500, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Sync Error" }), { status: 500, headers: corsHeaders });
     }
   }
 };
