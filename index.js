@@ -14,12 +14,10 @@ export default {
     const lon = urlParams.get("lon") || cf.longitude || "-98.64";
     const city = urlParams.get("city") || cf.city || "Local Area";
     const zip = urlParams.get("zip") || cf.postalCode || "78015";
-    const region = cf.regionCode || "";
 
     const apiKey = env.TOMORROW_API_KEY; 
     
     try {
-      // 1. Weather, Sun, and NWS Alerts in parallel
       const [weatherRes, sunRes, alertRes] = await Promise.all([
         fetch(`https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`),
         fetch(`https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0`),
@@ -33,11 +31,19 @@ export default {
       const aData = await alertRes.json();
       const v = wData.data.values;
 
+      // TIMEZONE FIX: Force Texas Time (CST/CDT)
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Chicago',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+      const localUpdate = formatter.format(new Date());
+
       const month = new Date().getMonth();
-      const isTexas = region === "TX" || city.includes("Fair Oaks") || city.includes("San Antonio");
-      
-      // Texas Pollen Logic
+      const isTexas = cf.regionCode === "TX" || city.includes("Fair Oaks");
       const isOakSeason = isTexas && (month >= 1 && month <= 4); 
+
       const getLevel = (val, type) => {
         const levels = ["None", "Very Low", "Low", "Medium", "High", "Very High"];
         let label = levels[Math.round(val)] || "None";
@@ -45,15 +51,12 @@ export default {
         return label;
       };
 
-      const treeLevel = getLevel(v.treeIndex, 'tree');
-      const pollenAlert = isTexas && (v.treeIndex > 2 || treeLevel.includes("Elevated"));
       const rainChance = v.precipitationProbability || 0;
-
-      // NWS Alert Logic
-      const activeAlert = aData.features && aData.features.length > 0 ? aData.features[0].properties.headline : null;
-
+      const treeLevel = getLevel(v.treeIndex, 'tree');
+      
       const result = {
-        city, zip, lat, lon, isTexas, activeAlert,
+        city, zip, lat, lon, isTexas,
+        activeAlert: aData.features?.[0]?.properties?.headline || null,
         temp: Math.round(v.temperature),
         feelsLike: Math.round(v.temperatureApparent),
         uv: v.uvIndex || 0,
@@ -61,12 +64,12 @@ export default {
         humidity: v.humidity,
         wind: Math.round(v.windSpeed),
         humDesc: v.humidity < 30 ? "🌵 Dry Air" : v.humidity > 65 ? "💧 Muggy" : "Comfortable",
-        pollenAlert,
-        sunset: sData.results.sunset,
-        washAdvice: (rainChance >= 25 || pollenAlert) ? "⚠️ Skip Wash" : "✨ Wash OK",
-        washColor: (rainChance >= 25 || pollenAlert) ? "#fbbf24" : "#22c55e",
+        pollenAlert: isTexas && (v.treeIndex > 2 || treeLevel.includes("Elevated")),
+        sunset: sData.results.sunset, 
+        washAdvice: (rainChance >= 25 || (isTexas && v.treeIndex > 2)) ? "⚠️ Skip Wash" : "✨ Wash OK",
+        washColor: (rainChance >= 25 || (isTexas && v.treeIndex > 2)) ? "#fbbf24" : "#22c55e",
         isPrecise: !!urlParams.get("lat"),
-        updated: new Date().toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })
+        updated: localUpdate
       };
 
       return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
