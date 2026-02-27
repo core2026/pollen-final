@@ -15,7 +15,6 @@ export default {
 
     if (response) {
       console.log("Cache Hit!");
-      // Pass through with cache hit header visible to client
       const cachedHeaders = new Headers(response.headers);
       cachedHeaders.set("X-Cache", "HIT");
       return new Response(response.body, { headers: cachedHeaders });
@@ -38,8 +37,7 @@ export default {
 
       const v = j.data.values;
 
-      // FIX: Use Intl.DateTimeFormat for proper Central Time with automatic DST support
-      // Workers always run in UTC, so getTimezoneOffset() is always 0 — don't use it.
+      // Use Intl for proper Central Time with automatic DST support
       const formattedTime = new Intl.DateTimeFormat('en-US', {
         timeZone: 'America/Chicago',
         hour: '2-digit',
@@ -50,8 +48,8 @@ export default {
       const data = JSON.stringify({
         city: cityName,
         slug: citySlug,
-        lat: parseFloat(lat).toFixed(2),
-        lon: parseFloat(lon).toFixed(2),
+        lat: parseFloat(lat),
+        lon: parseFloat(lon),
         temp: Math.round(v.temperature),
         feelsLike: Math.round(v.temperatureApparent),
         uv: v.uvIndex,
@@ -60,21 +58,16 @@ export default {
         updated: formattedTime
       });
 
-      // 3. Create response — cache for 10 minutes at edge AND browser
       response = new Response(data, {
         headers: {
           ...corsHeaders,
           "Content-Type": "application/json",
-          // s-maxage: Cloudflare edge cache TTL
-          // max-age: browser cache TTL (reduces repeated Worker invocations)
           "Cache-Control": "public, s-maxage=600, max-age=600",
           "X-Cache": "MISS"
         }
       });
 
-      // Store in Cloudflare Cache API while returning to user
       ctx.waitUntil(cache.put(cacheKey, response.clone()));
-
       return response;
 
     } catch (e) {
