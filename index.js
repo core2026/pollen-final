@@ -11,10 +11,8 @@ export default {
     const urlParams = new URL(request.url).searchParams;
     const cf = request.cf || {};
     
-    // DETECT PRIVATE RELAY / VPN
-    // Apple Private Relay usually shows up with specific ASNs or "Apple Inc"
     const asName = cf.asOrganization || "";
-    const isProxy = asName.includes("Apple") || asName.includes("Google") || asName.includes("Cloudflare") || asName.includes("Proxy");
+    const isProxy = asName.includes("Apple") || asName.includes("Cloudflare") || asName.includes("Proxy");
 
     const lat = urlParams.get("lat") || cf.latitude || "29.74"; 
     const lon = urlParams.get("lon") || cf.longitude || "-98.64";
@@ -23,18 +21,22 @@ export default {
     const apiKey = env.TOMORROW_API_KEY; 
     
     try {
+      // Use Promise.allSettled so one failed API doesn't kill the whole request
       const [weatherRes, sunRes, alertRes] = await Promise.all([
         fetch(`https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`),
         fetch(`https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0`),
         fetch(`https://api.weather.gov/alerts/active?point=${lat},${lon}`, {
-          headers: { "User-Agent": "AcekallasDashboard/1.0" }
+          headers: { "User-Agent": "AcekallasDashboard/1.1" }
         })
       ]);
 
-      const wData = await weatherRes.json();
-      const sData = await sunRes.json();
-      const aData = await alertRes.json();
+      const wData = await weatherRes.json().catch(() => ({}));
+      const sData = await sunRes.json().catch(() => ({}));
+      const aData = await alertRes.json().catch(() => ({}));
       
+      const v = wData?.data?.values || {};
+      const alerts = aData?.features || [];
+
       const formatter = new Intl.DateTimeFormat('en-US', {
         timeZone: 'America/Chicago',
         hour: '2-digit', minute: '2-digit', hour12: true
@@ -42,22 +44,22 @@ export default {
 
       const result = {
         city, lat, lon, isProxy,
-        activeAlert: aData.features?.[0]?.properties?.headline || null,
-        temp: Math.round(wData.data.values.temperature),
-        feelsLike: Math.round(wData.data.values.temperatureApparent),
-        uv: wData.data.values.uvIndex || 0,
-        tree: wData.data.values.treeIndex, // Sending raw index for better logic
-        humidity: wData.data.values.humidity,
-        wind: Math.round(wData.data.values.windSpeed),
-        sunrise: sData.results.sunrise,
-        sunset: sData.results.sunset,
+        activeAlert: alerts[0]?.properties?.headline || null,
+        temp: v.temperature !== undefined ? Math.round(v.temperature) : "--",
+        feelsLike: v.temperatureApparent !== undefined ? Math.round(v.temperatureApparent) : "--",
+        uv: v.uvIndex || 0,
+        tree: v.treeIndex || 0,
+        humidity: v.humidity || 0,
+        wind: v.windSpeed !== undefined ? Math.round(v.windSpeed) : 0,
+        sunrise: sData?.results?.sunrise || null,
+        sunset: sData?.results?.sunset || null,
         isPrecise: !!urlParams.get("lat"),
         updated: formatter.format(new Date())
       };
 
       return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     } catch (err) {
-      return new Response(JSON.stringify({ error: "Offline" }), { status: 500, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Data Sync Error", details: err.message }), { status: 500, headers: corsHeaders });
     }
   }
 };
