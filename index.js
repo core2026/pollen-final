@@ -16,12 +16,12 @@ export default {
 
     const lat = urlParams.get("lat") || cf.latitude || "29.74"; 
     const lon = urlParams.get("lon") || cf.longitude || "-98.64";
+    // If we have precise lat/lon but no city name from the URL, we use a fallback or the CF city
     const city = urlParams.get("city") || cf.city || "Local Area";
 
     const apiKey = env.TOMORROW_API_KEY; 
     
     try {
-      // Use Promise.allSettled so one failed API doesn't kill the whole request
       const [weatherRes, sunRes, alertRes] = await Promise.all([
         fetch(`https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${apiKey}`),
         fetch(`https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0`),
@@ -43,7 +43,8 @@ export default {
       });
 
       const result = {
-        city, lat, lon, isProxy,
+        city: city === "User Location" ? "Precise Location" : city,
+        lat, lon, isProxy,
         activeAlert: alerts[0]?.properties?.headline || null,
         temp: v.temperature !== undefined ? Math.round(v.temperature) : "--",
         feelsLike: v.temperatureApparent !== undefined ? Math.round(v.temperatureApparent) : "--",
@@ -59,7 +60,7 @@ export default {
 
       return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     } catch (err) {
-      return new Response(JSON.stringify({ error: "Data Sync Error", details: err.message }), { status: 500, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Sync Error" }), { status: 500, headers: corsHeaders });
     }
   }
 };
