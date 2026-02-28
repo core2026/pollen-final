@@ -20,10 +20,21 @@ export default {
 
     const urlParams = new URL(request.url).searchParams;
     const cf = request.cf || {};
+
     const lat = urlParams.get("lat") || cf.latitude || "29.7408";
     const lon = urlParams.get("lon") || cf.longitude || "-98.6444";
     const cityName = urlParams.get("name") || cf.city || "San Antonio";
     const citySlug = cityName.toLowerCase().replace(/\s+/g, '-');
+
+    // Cloudflare exposes the ASN org name — use it to detect VPN/relay at the edge
+    // This catches iCloud Private Relay (Apple AS714), known VPN ASNs, etc.
+    const asOrg = (cf.asOrganization || '').toLowerCase();
+    const isRelay = asOrg.includes('apple') || asOrg.includes('icloud') ||
+                    asOrg.includes('private') || asOrg.includes('relay') ||
+                    asOrg.includes('mullvad') || asOrg.includes('nord') ||
+                    asOrg.includes('express') || asOrg.includes('proton') ||
+                    asOrg.includes('tor project') || asOrg.includes('vpn') ||
+                    asOrg.includes('cloudflare') && urlParams.get("lat"); // Cloudflare WARP
 
     try {
       const apiUrl = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}`;
@@ -52,7 +63,9 @@ export default {
         precipChance: Math.round(v.precipitationProbability || 0),
         weatherCode: v.weatherCode || 1000,
         visibility: Math.round(v.visibility || 10),
-        updated: formattedTime
+        updated: formattedTime,
+        isRelay: isRelay,           // ← client uses this to show VPN badge
+        asOrg: cf.asOrganization || ""  // ← for debugging
       });
 
       response = new Response(data, {
