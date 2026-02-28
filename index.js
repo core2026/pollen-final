@@ -11,13 +11,24 @@ export default {
     const urlParams = new URL(request.url).searchParams;
     const cf = request.cf || {};
 
-    // Check relay BEFORE cache — this is per-request, never cached
+    // Cloudflare exposes cf.asOrganization and cf.asn (ASN number)
+    // iCloud Private Relay egress IPs route through Fastly (AS54113), Akamai (AS20940),
+    // or Apple-owned ranges (AS714). Check both org name and ASN number.
     const asOrg = (cf.asOrganization || '').toLowerCase();
-    const isRelay = asOrg.includes('apple') || asOrg.includes('icloud') ||
-                    asOrg.includes('private') || asOrg.includes('relay') ||
-                    asOrg.includes('mullvad') || asOrg.includes('nord') ||
-                    asOrg.includes('express') || asOrg.includes('proton') ||
-                    asOrg.includes('tor project') || asOrg.includes('vpn');
+    const asn = cf.asn || 0;
+    const isRelay =
+      // Known Private Relay / VPN ASN numbers
+      asn === 714   ||  // Apple Inc
+      asn === 54113 ||  // Fastly (Apple Private Relay egress)
+      asn === 20940 ||  // Akamai (Apple Private Relay egress)
+      asn === 394699||  // Apple Services
+      // Org name fallbacks
+      asOrg.includes('apple') || asOrg.includes('icloud') ||
+      asOrg.includes('private') || asOrg.includes('relay') ||
+      asOrg.includes('mullvad') || asOrg.includes('nord') ||
+      asOrg.includes('express') || asOrg.includes('proton') ||
+      asOrg.includes('tor project') || asOrg.includes('vpn') ||
+      asOrg.includes('fastly') || asOrg.includes('akamai');
 
     const lat = urlParams.get("lat") || cf.latitude || "29.7408";
     const lon = urlParams.get("lon") || cf.longitude || "-98.6444";
