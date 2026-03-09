@@ -11,18 +11,13 @@ export default {
     const urlParams = new URL(request.url).searchParams;
     const cf = request.cf || {};
 
-    // Cloudflare exposes cf.asOrganization and cf.asn (ASN number)
-    // iCloud Private Relay egress IPs route through Fastly (AS54113), Akamai (AS20940),
-    // or Apple-owned ranges (AS714). Check both org name and ASN number.
     const asOrg = (cf.asOrganization || '').toLowerCase();
     const asn = cf.asn || 0;
     const isRelay =
-      // Known Private Relay / VPN ASN numbers
-      asn === 714   ||  // Apple Inc
-      asn === 54113 ||  // Fastly (Apple Private Relay egress)
-      asn === 20940 ||  // Akamai (Apple Private Relay egress)
-      asn === 394699||  // Apple Services
-      // Org name fallbacks
+      asn === 714   ||
+      asn === 54113 ||
+      asn === 20940 ||
+      asn === 394699||
       asOrg.includes('apple') || asOrg.includes('icloud') ||
       asOrg.includes('private') || asOrg.includes('relay') ||
       asOrg.includes('mullvad') || asOrg.includes('nord') ||
@@ -35,13 +30,11 @@ export default {
     const cityName = urlParams.get("name") || cf.city || "San Antonio";
     const citySlug = cityName.toLowerCase().replace(/\s+/g, '-');
 
-    // Cache weather data (not relay status — that's injected fresh each time)
     const cache = caches.default;
     const cacheKey = new Request(request.url, request);
     let response = await cache.match(cacheKey);
 
     if (response) {
-      // Serve cached weather but inject fresh isRelay for this specific request
       const cached = await response.json();
       cached.isRelay = isRelay;
       cached.asOrg = cf.asOrganization || "";
@@ -51,18 +44,59 @@ export default {
     }
 
     try {
-      const apiUrl = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}`;
-      const res = await fetch(apiUrl);
-      const j = await res.json();
+      // Realtime call (existing fields)
+      const realtimeUrl = `https://api.tomorrow.io/v4/weather/realtime?location=${lat},${lon}&units=imperial&apikey=${env.TOMORROW_API_KEY}`;
 
-      if (!j.data) throw new Error("API Limit");
+      // Forecast call — hourly + daily in one request, free plan fields only
+      const forecastFields = [
+        'temperature','temperatureApparent','humidity','windSpeed',
+        'precipitationProbability','weatherCode','uvIndex','visibility','dewPoint'
+      ].join(',');
+      const forecastUrl = `https://api.tomorrow.io/v4/weather/forecast?location=${lat},${lon}&units=imperial&timesteps=1h,1d&fields=${forecastFields}&apikey=${env.TOMORROW_API_KEY}`;
 
-      const v = j.data.values;
+      const [realtimeRes, forecastRes] = await Promise.all([
+        fetch(realtimeUrl),
+        fetch(forecastUrl)
+      ]);
+
+      const realtimeJson = await realtimeRes.json();
+      const forecastJson = await forecastRes.json();
+
+      if (!realtimeJson.data) throw new Error("Realtime API limit or error");
+
+      const v = realtimeJson.data.values;
 
       const formattedTime = new Intl.DateTimeFormat('en-US', {
         timeZone: 'America/Chicago',
         hour: '2-digit', minute: '2-digit', hour12: true
       }).format(new Date());
+
+      // Next 12 hours
+      const hourlyRaw = forecastJson?.timelines?.hourly || [];
+      const hourly = hourlyRaw.slice(0, 12).map(h => ({
+        time: h.time,
+        temp: Math.round(h.values.temperature),
+        feelsLike: Math.round(h.values.temperatureApparent),
+        precip: Math.round(h.values.precipitationProbability || 0),
+        weatherCode: h.values.weatherCode || 1000,
+        wind: Math.round(h.values.windSpeed || 0),
+        uv: h.values.uvIndex || 0,
+        humidity: Math.round(h.values.humidity || 0),
+        dewPoint: Math.round(h.values.dewPoint || 0)
+      }));
+
+      // Next 5 days
+      const dailyRaw = forecastJson?.timelines?.daily || [];
+      const daily = dailyRaw.slice(0, 5).map(d => ({
+        time: d.time,
+        tempHigh: Math.round(d.values.temperatureMax ?? d.values.temperature),
+        tempLow:  Math.round(d.values.temperatureMin ?? d.values.temperature),
+        precip: Math.round(d.values.precipitationProbabilityAvg || 0),
+        weatherCode: d.values.weatherCodeMax || d.values.weatherCode || 1000,
+        wind: Math.round(d.values.windSpeedAvg || 0),
+        uvMax: Math.round(d.values.uvIndexMax || 0),
+        humidity: Math.round(d.values.humidityAvg || 0)
+      }));
 
       const data = JSON.stringify({
         city: cityName,
@@ -77,9 +111,12 @@ export default {
         precipChance: Math.round(v.precipitationProbability || 0),
         weatherCode: v.weatherCode || 1000,
         visibility: Math.round(v.visibility || 10),
+        dewPoint: Math.round(v.dewPoint || 0),
         updated: formattedTime,
         isRelay: isRelay,
-        asOrg: cf.asOrganization || ""
+        asOrg: cf.asOrganization || "",
+        hourly,
+        daily
       });
 
       response = new Response(data, {
@@ -95,7 +132,7 @@ export default {
       return response;
 
     } catch (e) {
-      return new Response(JSON.stringify({ error: "Service Busy" }), {
+      return new Response(JSON.stringify({ error: "Service Busy", detail: e.message }), {
         status: 429,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
