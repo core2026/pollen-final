@@ -1,3 +1,39 @@
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║  ACEKALLAS WEATHER — CLOUDFLARE WORKER                                      ║
+// ║  ai-deploy-rules: index_pollen-final.js                                     ║
+// ╠══════════════════════════════════════════════════════════════════════════════╣
+// ║  ⚠️  AI ASSISTANT — READ THIS BEFORE EDITING                                ║
+// ║                                                                             ║
+// ║  DEPLOYMENT: This file goes to Cloudflare Workers dashboard ONLY.           ║
+// ║    URL: pollen-data.acekallas.com                                           ║
+// ║    Worker name in dashboard: pollen-data (or similar)                      ║
+// ║    DO NOT push this to GitHub Pages — it won't work there.                 ║
+// ║                                                                             ║
+// ║  ENVIRONMENT VARIABLES (set in Cloudflare dashboard → Settings → Variables)║
+// ║    TOMORROW_API_KEY — Tomorrow.io API key (free tier)                      ║
+// ║    Do NOT hardcode the key in this file.                                   ║
+// ║                                                                             ║
+// ║  WHAT THIS WORKER RETURNS (all fields expected by index.html):             ║
+// ║    city, slug, lat, lon                                                    ║
+// ║    temp, feelsLike, humidity, wind, uv, dewPoint                           ║
+// ║    precipChance, weatherCode, visibility                                   ║
+// ║    hourly[12] — next 12 hours: time,temp,feelsLike,precip,                ║
+// ║                  weatherCode,wind,uv,humidity,dewPoint                     ║
+// ║    daily[5]  — next 5 days: time,tempHigh,tempLow,precip,                 ║
+// ║                 weatherCode,wind,uvMax,humidity                            ║
+// ║    isRelay, asOrg — VPN/Private Relay detection via Cloudflare ASN        ║
+// ║    updated — formatted time string (America/Chicago)                      ║
+// ║                                                                             ║
+// ║  CACHING: 10-minute Cloudflare cache. isRelay is injected fresh on every  ║
+// ║    request even when serving cached weather data.                          ║
+// ║                                                                             ║
+// ║  ERROR RESPONSE: { error: "Service Busy" } with HTTP 429                  ║
+// ║    index.html handles this via !r.ok check — do not change the status.    ║
+// ║                                                                             ║
+// ║  AFTER EDITING: Deploy in Cloudflare dashboard → Save and Deploy.         ║
+// ║  Also bump sw.js CACHE_VERSION and index.html version comment.            ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
 export default {
   async fetch(request, env, ctx) {
     const corsHeaders = {
